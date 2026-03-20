@@ -4,4 +4,3 @@ ultralytics
 pyyaml
 numpy
 pathlib
-Pillow

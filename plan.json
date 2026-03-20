@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
   "revision": 3,
-  "current_step": 7,
+  "current_step": 8,
   "plan": [
     {
       "step": 1,
@@ -71,8 +71,8 @@
       "hypothesis": "A separate crop classifier trained on GT crops can improve classification_map50 from ~0.71 to 0.80+, boosting final_score since classification is the weaker component (0.71 vs 0.82 detection)",
       "description": "Extract product crops from training images using GT bounding boxes. Train a lightweight classifier (EfficientNet-B0 or ResNet-50 via torchvision) on these crops with proper augmentation. At inference: detect with YOLO (class-agnostic or multi-class), crop detections, classify with separate model, use classifier predictions to override/refine YOLO class predictions. Must fit within 300s inference and 420MB model size.",
       "success_criteria": "classification_map50 > 0.75 and final_score > 0.80",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-007"
     },
     {
       "step": 8,
