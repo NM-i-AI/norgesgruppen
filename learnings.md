@@ -32,3 +32,11 @@
 - Result: final_score 0.7862 → 0.7882 (+0.3%), detection_map50 0.8219, classification_map50 0.7098
 - Side effects: Significantly longer training time (1280.8s vs previous experiments), reduced batch size required for memory constraints
 - Takeaway: Scaling up model size with extensive hyperparameter tuning yielded minimal improvement (+0.3%), suggesting the bottleneck may be data quality or architecture rather than model capacity.
+
+## Experiment 5 — Confidence threshold and NMS optimization sweep
+- Status: REGRESS
+- Hypothesis: Sweeping confidence thresholds (0.05-0.5) and NMS IoU (0.3-0.8) on validation set will find a better operating point, improving final_score by 1-3%
+- Change: Implemented comprehensive parameter sweep testing 60 configurations of confidence (0.05-0.5) and NMS IoU (0.3-0.8) thresholds with proper mAP calculation
+- Result: final_score 0.7882 → 0.5282 (33% decline), best config was conf=0.05, nms=0.3
+- Side effects: Extensive computation (265s) testing 60 configurations on validation set
+- Takeaway: The parameter sweep revealed a fundamental issue with the evaluation methodology or model performance, as even the best configuration significantly underperformed the baseline.

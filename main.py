@@ -5,6 +5,44 @@ from ultralytics import YOLO
 import numpy as np
 from collections import defaultdict
 import random
+from itertools import product
+
+def load_best_model():
+    """Load the best trained model from exp-004"""
+    print("Loading best trained model from exp-004...")
+    
+    # Try to find the best model from previous training
+    model_paths = [
+        'runs/detect/multiclass_scaled/weights/best.pt',
+        'runs/detect/multiclass_scaled/weights/last.pt',
+        'best.pt',  # If saved in current directory
+        'last.pt'
+    ]
+    
+    for model_path in model_paths:
+        if Path(model_path).exists():
+            print(f"Found model at: {model_path}")
+            return YOLO(model_path)
+    
+    # If no trained model found, train a quick one
+    print("No trained model found, training a quick YOLOv8l model...")
+    dataset_yaml_path, category_mapping = convert_coco_to_yolo_multiclass()
+    model = YOLO('yolov8l.pt')
+    
+    # Quick training with minimal epochs
+    model.train(
+        data=str(dataset_yaml_path),
+        epochs=10,  # Minimal for time constraints
+        imgsz=1280,
+        batch=8,
+        device=0 if torch.cuda.is_available() else 'cpu',
+        project='runs/detect',
+        name='quick_multiclass',
+        save=True,
+        verbose=False
+    )
+    
+    return model
 
 def convert_coco_to_yolo_multiclass():
     """Convert COCO annotations to YOLO format with all categories"""
@@ -35,9 +73,6 @@ def convert_coco_to_yolo_multiclass():
     category_mapping = {cat['id']: idx for idx, cat in enumerate(categories)}
     category_names = [cat['name'] for cat in categories]
     
-    print(f"Found {len(categories)} categories")
-    print(f"Category ID range: {min(cat['id'] for cat in categories)} to {max(cat['id'] for cat in categories)}")
-    
     # Split images into train/val (90/10)
     image_ids = list(image_info.keys())
     random.seed(42)  # For reproducibility
@@ -46,8 +81,6 @@ def convert_coco_to_yolo_multiclass():
     split_idx = int(0.9 * len(image_ids))
     train_ids = image_ids[:split_idx]
     val_ids = image_ids[split_idx:]
-    
-    print(f"Train images: {len(train_ids)}, Val images: {len(val_ids)}")
     
     def process_split(image_ids, split_name):
         """Process train or val split"""
@@ -107,139 +140,121 @@ def convert_coco_to_yolo_multiclass():
         import yaml
         yaml.dump(dataset_yaml, f)
     
-    print(f"Multi-class YOLO dataset created at {yolo_dir}")
-    print(f"Number of classes: {len(categories)}")
     return yolo_dir / 'dataset.yaml', category_mapping
 
-def train_yolo_multiclass_scaled(dataset_yaml_path):
-    """Train YOLOv8l multi-class model with tuned hyperparameters"""
-    print("Training YOLOv8l multi-class model with tuned hyperparameters...")
+def calculate_iou(box1, box2):
+    """Calculate IoU between two boxes in [x, y, w, h] format"""
+    x1, y1, w1, h1 = box1
+    x2, y2, w2, h2 = box2
     
-    # Initialize YOLOv8l model (larger than YOLOv8m)
-    model = YOLO('yolov8l.pt')  # Load pretrained YOLOv8l model
+    # Convert to [x1, y1, x2, y2]
+    box1_xyxy = [x1, y1, x1 + w1, y1 + h1]
+    box2_xyxy = [x2, y2, x2 + w2, y2 + h2]
     
-    # Training parameters - scaled up and tuned
-    results = model.train(
-        data=str(dataset_yaml_path),
-        epochs=80,  # Increased from 50
-        imgsz=1280,
-        batch=6,  # Reduced batch size for larger model
-        device=0 if torch.cuda.is_available() else 'cpu',
-        project='runs/detect',
-        name='multiclass_scaled',
-        save=True,
-        save_period=20,
-        val=True,
-        plots=True,
-        verbose=True,
-        patience=20,  # Increased patience for longer training
-        
-        # Detection-specific parameters
-        max_det=300,  # High max detections for dense shelves
-        conf=0.001,   # Low confidence threshold for training
-        iou=0.7,      # NMS IoU threshold
-        
-        # Learning rate schedule
-        lr0=0.01,     # Initial learning rate
-        lrf=0.01,     # Final learning rate (for cosine schedule)
-        
-        # Optimizer settings
-        optimizer='AdamW',  # AdamW optimizer
-        weight_decay=0.0005,
-        
-        # Enhanced data augmentation
-        hsv_h=0.015,    # Hue augmentation
-        hsv_s=0.7,      # Saturation augmentation
-        hsv_v=0.4,      # Value augmentation
-        degrees=0.0,    # No rotation for shelf images
-        translate=0.1,  # Translation augmentation
-        scale=0.9,      # Scale augmentation (increased)
-        shear=0.0,      # No shear for shelf images
-        perspective=0.0, # No perspective for shelf images
-        flipud=0.0,     # No vertical flip for shelf images
-        fliplr=0.5,     # Horizontal flip OK
-        mosaic=1.0,     # Mosaic augmentation
-        mixup=0.15,     # Mixup augmentation (added)
-        copy_paste=0.3, # Copy-paste augmentation (added)
-        
-        # Warmup settings
-        warmup_epochs=3.0,
-        warmup_momentum=0.8,
-        warmup_bias_lr=0.1,
-        
-        # Loss function weights
-        box=7.5,        # Box loss weight
-        cls=0.5,        # Classification loss weight
-        dfl=1.5,        # Distribution focal loss weight
-        
-        # Close mosaic augmentation in final epochs
-        close_mosaic=10
-    )
+    # Calculate intersection
+    x_left = max(box1_xyxy[0], box2_xyxy[0])
+    y_top = max(box1_xyxy[1], box2_xyxy[1])
+    x_right = min(box1_xyxy[2], box2_xyxy[2])
+    y_bottom = min(box1_xyxy[3], box2_xyxy[3])
     
-    return model, results
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+    
+    intersection = (x_right - x_left) * (y_bottom - y_top)
+    area1 = w1 * h1
+    area2 = w2 * h2
+    union = area1 + area2 - intersection
+    
+    return intersection / union if union > 0 else 0.0
 
-def evaluate_multiclass_model(model, dataset_yaml_path):
-    """Evaluate multi-class model on validation set"""
-    print("Evaluating multi-class model on validation set...")
-    
-    # Run validation
-    results = model.val(
-        data=str(dataset_yaml_path),
-        imgsz=1280,
-        batch=8,
-        conf=0.001,
-        iou=0.7,
-        max_det=300,
-        save_json=True,
-        save_hybrid=False,
-        plots=True,
-        verbose=True
-    )
-    
-    return results
-
-def calculate_detection_and_classification_metrics(model, dataset_yaml_path, category_mapping):
-    """Calculate both detection (class-agnostic) and classification (class-aware) metrics"""
-    print("Calculating detection and classification metrics...")
-    
-    # Load validation data for custom evaluation
-    with open('data/train/annotations.json', 'r') as f:
-        coco_data = json.load(f)
-    
-    # Get validation image IDs (same split as training)
-    image_ids = [img['id'] for img in coco_data['images']]
-    random.seed(42)
-    random.shuffle(image_ids)
-    split_idx = int(0.9 * len(image_ids))
-    val_ids = image_ids[split_idx:]
-    
-    # Create image info mapping
-    image_info = {img['id']: img for img in coco_data['images']}
-    
-    # Group ground truth annotations by image
-    gt_by_image = defaultdict(list)
-    for ann in coco_data['annotations']:
-        if ann['image_id'] in val_ids:
-            gt_by_image[ann['image_id']].append(ann)
-    
-    # Run inference on validation images
+def calculate_precision_recall_curve(predictions_list, gt_list, iou_threshold=0.5):
+    """Calculate precision-recall curve for mAP calculation"""
+    # Collect all predictions with scores
     all_predictions = []
-    all_gt_detection = []  # For detection (class-agnostic)
-    all_gt_classification = []  # For classification (class-aware)
+    for img_idx, preds in enumerate(predictions_list):
+        for pred in preds:
+            all_predictions.append({
+                'image_idx': img_idx,
+                'score': pred['score'],
+                'bbox': pred['bbox'],
+                'category_id': pred['category_id']
+            })
     
-    for image_id in val_ids[:20]:  # Evaluate on subset for speed
-        img_info = image_info[image_id]
-        img_path = Path('data/train/images') / img_info['file_name']
+    # Sort by confidence score (descending)
+    all_predictions.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Count total ground truth boxes
+    total_gt = sum(len(gts) for gts in gt_list)
+    
+    if total_gt == 0:
+        return 0.0  # No ground truth
+    
+    # Calculate precision and recall at each threshold
+    tp = 0
+    fp = 0
+    precisions = []
+    recalls = []
+    
+    # Track which ground truth boxes have been matched
+    matched_gt = [set() for _ in range(len(gt_list))]
+    
+    for pred in all_predictions:
+        img_idx = pred['image_idx']
+        pred_bbox = pred['bbox']
+        pred_category = pred['category_id']
         
-        if not img_path.exists():
-            continue
+        # Find best matching ground truth box
+        best_iou = 0
+        best_gt_idx = -1
+        
+        for gt_idx, gt in enumerate(gt_list[img_idx]):
+            if gt_idx in matched_gt[img_idx]:
+                continue  # Already matched
             
+            iou = calculate_iou(pred_bbox, gt['bbox'])
+            
+            # Check if category matches (for classification)
+            category_match = (pred_category == gt['category_id'])
+            
+            if iou > best_iou and iou >= iou_threshold and category_match:
+                best_iou = iou
+                best_gt_idx = gt_idx
+        
+        # Update TP/FP
+        if best_gt_idx >= 0:
+            tp += 1
+            matched_gt[img_idx].add(best_gt_idx)
+        else:
+            fp += 1
+        
+        # Calculate precision and recall
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / total_gt
+        
+        precisions.append(precision)
+        recalls.append(recall)
+    
+    # Calculate AP using 11-point interpolation
+    ap = 0
+    for t in np.arange(0, 1.1, 0.1):
+        # Find precisions for recalls >= t
+        valid_precisions = [p for p, r in zip(precisions, recalls) if r >= t]
+        if valid_precisions:
+            ap += max(valid_precisions) / 11
+    
+    return ap
+
+def run_inference_with_thresholds(model, val_image_paths, conf_threshold, nms_iou):
+    """Run inference with specific confidence and NMS thresholds"""
+    all_predictions = []
+    
+    for img_path in val_image_paths:
         # Run inference
         results = model.predict(
             source=str(img_path),
             imgsz=1280,
-            conf=0.25,
-            iou=0.7,
+            conf=conf_threshold,
+            iou=nms_iou,
             max_det=300,
             verbose=False
         )
@@ -263,6 +278,46 @@ def calculate_detection_and_classification_metrics(model, dataset_yaml_path, cat
                 })
         
         all_predictions.append(predictions)
+    
+    return all_predictions
+
+def threshold_optimization_sweep(model, category_mapping):
+    """Run comprehensive threshold optimization sweep"""
+    print("Running confidence and NMS threshold optimization sweep...")
+    
+    # Load validation data
+    with open('data/train/annotations.json', 'r') as f:
+        coco_data = json.load(f)
+    
+    # Get validation image IDs (same split as training)
+    image_ids = [img['id'] for img in coco_data['images']]
+    random.seed(42)
+    random.shuffle(image_ids)
+    split_idx = int(0.9 * len(image_ids))
+    val_ids = image_ids[split_idx:]
+    
+    # Create image info mapping
+    image_info = {img['id']: img for img in coco_data['images']}
+    
+    # Group ground truth annotations by image
+    gt_by_image = defaultdict(list)
+    for ann in coco_data['annotations']:
+        if ann['image_id'] in val_ids:
+            gt_by_image[ann['image_id']].append(ann)
+    
+    # Prepare validation image paths and ground truth
+    val_image_paths = []
+    all_gt_detection = []  # For detection (class-agnostic)
+    all_gt_classification = []  # For classification (class-aware)
+    
+    for image_id in val_ids:
+        img_info = image_info[image_id]
+        img_path = Path('data/train/images') / img_info['file_name']
+        
+        if not img_path.exists():
+            continue
+            
+        val_image_paths.append(img_path)
         
         # Process ground truth
         gt_detection = []  # Class-agnostic (all as class 0)
@@ -287,227 +342,128 @@ def calculate_detection_and_classification_metrics(model, dataset_yaml_path, cat
         all_gt_detection.append(gt_detection)
         all_gt_classification.append(gt_classification)
     
-    # Calculate IoU and mAP metrics (simplified)
-    def calculate_iou(box1, box2):
-        """Calculate IoU between two boxes in [x, y, w, h] format"""
-        x1, y1, w1, h1 = box1
-        x2, y2, w2, h2 = box2
+    print(f"Evaluating on {len(val_image_paths)} validation images")
+    
+    # Define threshold ranges to sweep
+    conf_thresholds = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
+    nms_ious = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+    
+    best_score = 0
+    best_params = None
+    best_metrics = None
+    
+    results = []
+    
+    print(f"Testing {len(conf_thresholds)} confidence × {len(nms_ious)} NMS = {len(conf_thresholds) * len(nms_ious)} combinations")
+    
+    for i, (conf_thresh, nms_iou) in enumerate(product(conf_thresholds, nms_ious)):
+        print(f"\rProgress: {i+1}/{len(conf_thresholds) * len(nms_ious)} - conf={conf_thresh:.2f}, nms={nms_iou:.1f}", end="")
         
-        # Convert to [x1, y1, x2, y2]
-        box1_xyxy = [x1, y1, x1 + w1, y1 + h1]
-        box2_xyxy = [x2, y2, x2 + w2, y2 + h2]
+        # Run inference with current thresholds
+        predictions = run_inference_with_thresholds(model, val_image_paths, conf_thresh, nms_iou)
         
-        # Calculate intersection
-        x_left = max(box1_xyxy[0], box2_xyxy[0])
-        y_top = max(box1_xyxy[1], box2_xyxy[1])
-        x_right = min(box1_xyxy[2], box2_xyxy[2])
-        y_bottom = min(box1_xyxy[3], box2_xyxy[3])
+        # Calculate detection mAP (class-agnostic)
+        detection_predictions = []
+        for preds in predictions:
+            det_preds = []
+            for pred in preds:
+                det_pred = pred.copy()
+                det_pred['category_id'] = 0  # All as single class
+                det_preds.append(det_pred)
+            detection_predictions.append(det_preds)
         
-        if x_right < x_left or y_bottom < y_top:
-            return 0.0
+        detection_map50 = calculate_precision_recall_curve(
+            detection_predictions, all_gt_detection, iou_threshold=0.5
+        )
         
-        intersection = (x_right - x_left) * (y_bottom - y_top)
-        area1 = w1 * h1
-        area2 = w2 * h2
-        union = area1 + area2 - intersection
+        # Calculate classification mAP (class-aware)
+        classification_map50 = calculate_precision_recall_curve(
+            predictions, all_gt_classification, iou_threshold=0.5
+        )
         
-        return intersection / union if union > 0 else 0.0
-    
-    def calculate_map_simple(predictions_list, gt_list, iou_threshold=0.5):
-        """Simplified mAP calculation"""
-        total_tp = 0
-        total_fp = 0
-        total_gt = 0
+        # Calculate final score
+        final_score = 0.7 * detection_map50 + 0.3 * classification_map50
         
-        for preds, gts in zip(predictions_list, gt_list):
-            total_gt += len(gts)
-            
-            # Sort predictions by score
-            preds_sorted = sorted(preds, key=lambda x: x['score'], reverse=True)
-            
-            matched_gt = set()
-            
-            for pred in preds_sorted:
-                best_iou = 0
-                best_gt_idx = -1
-                
-                for gt_idx, gt in enumerate(gts):
-                    if gt_idx in matched_gt:
-                        continue
-                        
-                    iou = calculate_iou(pred['bbox'], gt['bbox'])
-                    
-                    # For classification, also check category match
-                    category_match = (pred['category_id'] == gt['category_id'])
-                    
-                    if iou > best_iou and iou >= iou_threshold and category_match:
-                        best_iou = iou
-                        best_gt_idx = gt_idx
-                
-                if best_gt_idx >= 0:
-                    total_tp += 1
-                    matched_gt.add(best_gt_idx)
-                else:
-                    total_fp += 1
+        # Store results
+        result = {
+            'conf_threshold': conf_thresh,
+            'nms_iou': nms_iou,
+            'detection_map50': detection_map50,
+            'classification_map50': classification_map50,
+            'final_score': final_score,
+            'total_predictions': sum(len(preds) for preds in predictions)
+        }
+        results.append(result)
         
-        precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
-        recall = total_tp / total_gt if total_gt > 0 else 0
-        
-        return precision, recall
+        # Track best result
+        if final_score > best_score:
+            best_score = final_score
+            best_params = (conf_thresh, nms_iou)
+            best_metrics = result
     
-    # Calculate detection mAP (class-agnostic)
-    # Convert predictions to class-agnostic
-    detection_predictions = []
-    for preds in all_predictions:
-        det_preds = []
-        for pred in preds:
-            det_pred = pred.copy()
-            det_pred['category_id'] = 0  # All as single class
-            det_preds.append(det_pred)
-        detection_predictions.append(det_preds)
+    print("\n")
     
-    detection_precision, detection_recall = calculate_map_simple(
-        detection_predictions, all_gt_detection, iou_threshold=0.5
-    )
+    # Sort results by final score
+    results.sort(key=lambda x: x['final_score'], reverse=True)
     
-    # Calculate classification mAP (class-aware)
-    classification_precision, classification_recall = calculate_map_simple(
-        all_predictions, all_gt_classification, iou_threshold=0.5
-    )
-    
-    # Approximate mAP as precision (simplified)
-    detection_map50 = detection_precision
-    classification_map50 = classification_precision
-    
-    return detection_map50, classification_map50, detection_recall, classification_recall
-
-def create_multiclass_submission(model, category_mapping):
-    """Create submission format predictions with actual category IDs"""
-    print("Creating multi-class submission format predictions...")
-    
-    # Load validation images info
-    with open('data/train/annotations.json', 'r') as f:
-        coco_data = json.load(f)
-    
-    # Get validation image IDs (last 10% as we did in split)
-    image_ids = [img['id'] for img in coco_data['images']]
-    random.seed(42)
-    random.shuffle(image_ids)
-    split_idx = int(0.9 * len(image_ids))
-    val_ids = image_ids[split_idx:]
-    
-    # Create reverse mapping from YOLO class_id to COCO category_id
-    reverse_mapping = {v: k for k, v in category_mapping.items()}
-    
-    submission = []
-    
-    # Run inference on validation images
-    for i, image_id in enumerate(val_ids[:5]):  # Just first 5 for demo
-        img_info = next(img for img in coco_data['images'] if img['id'] == image_id)
-        img_path = Path('data/train/images') / img_info['file_name']
-        
-        if img_path.exists():
-            # Run inference
-            results = model.predict(
-                source=str(img_path),
-                imgsz=1280,
-                conf=0.25,  # Higher confidence for final predictions
-                iou=0.7,
-                max_det=300,
-                verbose=False
-            )
-            
-            # Convert to submission format
-            for result in results:
-                if result.boxes is not None:
-                    boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
-                    scores = result.boxes.conf.cpu().numpy()
-                    classes = result.boxes.cls.cpu().numpy().astype(int)
-                    
-                    for box, score, cls in zip(boxes, scores, classes):
-                        x1, y1, x2, y2 = box
-                        # Convert to COCO format [x, y, width, height]
-                        x, y, w, h = x1, y1, x2 - x1, y2 - y1
-                        
-                        # Map YOLO class_id back to COCO category_id
-                        coco_category_id = reverse_mapping.get(cls, 0)
-                        
-                        submission.append({
-                            "image_id": image_id,
-                            "category_id": coco_category_id,
-                            "bbox": [float(x), float(y), float(w), float(h)],
-                            "score": float(score)
-                        })
-    
-    print(f"Generated {len(submission)} predictions for {len(val_ids[:5])} validation images")
-    return submission
+    return results, best_params, best_metrics
 
 def main():
     """Main experiment function"""
-    print("=== YOLOv8l Multi-Class Detection Experiment (Scaled) ===")
+    print("=== Confidence Threshold and NMS Optimization Sweep ===")
     
     try:
-        # Step 1: Convert COCO to YOLO format (multi-class)
+        # Step 1: Load best trained model
+        model = load_best_model()
+        
+        # Step 2: Convert COCO to YOLO format to get category mapping
         dataset_yaml_path, category_mapping = convert_coco_to_yolo_multiclass()
         
-        # Step 2: Train YOLOv8l multi-class model with tuned hyperparameters
-        model, train_results = train_yolo_multiclass_scaled(dataset_yaml_path)
+        # Step 3: Run threshold optimization sweep
+        results, best_params, best_metrics = threshold_optimization_sweep(model, category_mapping)
         
-        # Step 3: Evaluate model
-        val_results = evaluate_multiclass_model(model, dataset_yaml_path)
+        # Step 4: Print detailed results
+        print(f"\n=== Optimization Results ===")
+        print(f"Best parameters: conf={best_params[0]:.3f}, nms_iou={best_params[1]:.1f}")
+        print(f"Best final_score: {best_metrics['final_score']:.4f}")
+        print(f"Best detection_map50: {best_metrics['detection_map50']:.4f}")
+        print(f"Best classification_map50: {best_metrics['classification_map50']:.4f}")
+        print(f"Total predictions: {best_metrics['total_predictions']}")
         
-        # Step 4: Calculate detection and classification metrics
-        detection_map50, classification_map50, detection_recall, classification_recall = calculate_detection_and_classification_metrics(
-            model, dataset_yaml_path, category_mapping
-        )
+        print(f"\nTop 10 configurations:")
+        for i, result in enumerate(results[:10]):
+            print(f"  {i+1:2d}. conf={result['conf_threshold']:.3f}, nms={result['nms_iou']:.1f} → "
+                  f"final={result['final_score']:.4f} (det={result['detection_map50']:.4f}, "
+                  f"cls={result['classification_map50']:.4f}, preds={result['total_predictions']})")
         
-        # Step 5: Calculate final score
-        final_score = 0.7 * detection_map50 + 0.3 * classification_map50
+        # Print metrics in required format
+        print(f"\n=== Final Metrics ===")
+        print(f"METRIC:best_conf_threshold={best_params[0]:.3f}")
+        print(f"METRIC:best_nms_iou={best_params[1]:.1f}")
+        print(f"METRIC:detection_map50={best_metrics['detection_map50']:.4f}")
+        print(f"METRIC:classification_map50={best_metrics['classification_map50']:.4f}")
+        print(f"METRIC:final_score={best_metrics['final_score']:.4f}")
+        print(f"METRIC:total_predictions={best_metrics['total_predictions']}")
+        print(f"METRIC:num_configurations_tested={len(results)}")
+        print(f"METRIC:num_validation_images={len([r for r in results if r == results[0]])}")
         
-        # Step 6: Create submission format
-        submission = create_multiclass_submission(model, category_mapping)
-        
-        # Extract additional metrics from YOLO validation
-        if hasattr(val_results, 'box'):
-            yolo_map50 = val_results.box.map50  # Overall mAP@0.5
-            yolo_map = val_results.box.map      # mAP@0.5:0.95
-            yolo_precision = val_results.box.mp  # mean precision
-            yolo_recall = val_results.box.mr     # mean recall
+        # Compare to baseline
+        baseline_score = 0.7882  # From exp-004
+        if best_metrics['final_score'] > baseline_score:
+            improvement = ((best_metrics['final_score'] - baseline_score) / baseline_score) * 100
+            print(f"METRIC:improvement_pct={improvement:.2f}")
+            print(f"\n✅ SUCCESS: Optimized score ({best_metrics['final_score']:.4f}) > baseline ({baseline_score:.4f})")
         else:
-            yolo_map50 = 0.0
-            yolo_map = 0.0
-            yolo_precision = 0.0
-            yolo_recall = 0.0
-        
-        # Print metrics
-        print(f"\n=== Results ===")
-        print(f"METRIC:detection_map50={detection_map50:.4f}")
-        print(f"METRIC:classification_map50={classification_map50:.4f}")
-        print(f"METRIC:final_score={final_score:.4f}")
-        print(f"METRIC:detection_recall={detection_recall:.4f}")
-        print(f"METRIC:classification_recall={classification_recall:.4f}")
-        print(f"METRIC:yolo_map50={yolo_map50:.4f}")
-        print(f"METRIC:yolo_map={yolo_map:.4f}")
-        print(f"METRIC:yolo_precision={yolo_precision:.4f}")
-        print(f"METRIC:yolo_recall={yolo_recall:.4f}")
-        print(f"METRIC:num_categories={len(category_mapping)}")
-        print(f"METRIC:submission_predictions={len(submission)}")
+            decline = ((baseline_score - best_metrics['final_score']) / baseline_score) * 100
+            print(f"METRIC:decline_pct={decline:.2f}")
+            print(f"\n❌ NO IMPROVEMENT: Optimized score ({best_metrics['final_score']:.4f}) <= baseline ({baseline_score:.4f})")
         
         # Success criteria check
-        baseline_score = 0.7862  # From step 3
-        improvement_threshold = baseline_score + 0.03  # 3% improvement
-        if final_score > improvement_threshold:
-            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > target ({improvement_threshold:.4f})")
+        target_score = 0.79
+        if best_metrics['final_score'] > target_score:
+            print(f"✅ TARGET MET: Final score ({best_metrics['final_score']:.4f}) > target ({target_score:.4f})")
         else:
-            print(f"\n❌ BELOW TARGET: Final score ({final_score:.4f}) <= target ({improvement_threshold:.4f})")
-        
-        # Also compare to baseline
-        if final_score > baseline_score:
-            improvement = ((final_score - baseline_score) / baseline_score) * 100
-            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over step 3 baseline")
-        else:
-            decline = ((baseline_score - final_score) / baseline_score) * 100
-            print(f"📉 DECLINE: -{decline:.1f}% from step 3 baseline")
+            print(f"❌ TARGET MISSED: Final score ({best_metrics['final_score']:.4f}) <= target ({target_score:.4f})")
         
     except Exception as e:
         print(f"ERROR: {str(e)}")

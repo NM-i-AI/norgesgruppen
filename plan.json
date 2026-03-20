@@ -1,8 +1,8 @@
 {
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
-  "revision": 1,
-  "current_step": 4,
+  "revision": 2,
+  "current_step": 5,
   "plan": [
     {
       "step": 1,
@@ -41,46 +41,46 @@
       "hypothesis": "Larger model (YOLOv8l or x) with more epochs and tuned augmentation improves both detection and classification by 5-10%",
       "description": "Train YOLOv8l or YOLOv8x with all categories, imgsz=1280, 80 epochs, tuned augmentation (mosaic, scale, mixup). Use cosine LR schedule. Compare with step 3.",
       "success_criteria": "final_score improves by >3% over step 3",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-004"
     },
     {
       "step": 5,
       "type": "experiment",
-      "title": "Two-stage: Detection + crop classifier",
-      "hypothesis": "Using best detector + separate crop classifier (EfficientNet/ResNet) trained on GT crops outperforms end-to-end multi-class YOLO",
-      "description": "Extract product crops from training images using GT bounding boxes. Train a classification model (EfficientNet-B0 via timm) on these crops. At inference: detect with best single-class model, crop, classify. Compare final_score with multi-class YOLO.",
-      "success_criteria": "classification_mAP improves over multi-class YOLO approach",
+      "title": "Confidence threshold and NMS optimization sweep",
+      "hypothesis": "Sweeping confidence thresholds (0.05-0.5) and NMS IoU (0.3-0.8) on validation set will find a better operating point, improving final_score by 1-3%",
+      "description": "Load the best trained model from exp-004. Run inference on all validation images (not just 20) with various confidence and NMS threshold combinations. Calculate proper detection_map50 and classification_map50 using full precision-recall curves instead of the simplified single-point metric. Find optimal thresholds.",
+      "success_criteria": "final_score > 0.79 with optimized thresholds, and we have proper mAP evaluation",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 6,
       "type": "experiment",
-      "title": "Optimize detection: confidence threshold and NMS tuning",
-      "hypothesis": "Tuning confidence threshold and NMS IoU on validation set improves final_score by 1-3%",
-      "description": "Sweep confidence thresholds (0.01-0.5) and NMS IoU thresholds (0.3-0.8) and max_det (100-500) on validation set for the best approach so far. Find optimal combination.",
-      "success_criteria": "final_score improves by >1%",
+      "title": "Train on full data with YOLOv8l + best hyperparameters",
+      "hypothesis": "Using all 1000 images for training (no val holdout) gives the model 10% more data, improving classification of rare categories and boosting final_score by 1-2%",
+      "description": "Train YOLOv8l on ALL 1000 images (no validation split) using best hyperparameters from exp-004. Use the optimized conf/NMS thresholds from step 5. Evaluate on the same val split for comparison but submit with full-data model.",
+      "success_criteria": "final_score > 0.80",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 7,
       "type": "experiment",
-      "title": "Test-time augmentation (TTA)",
-      "hypothesis": "TTA with multi-scale and horizontal flip improves detection mAP within 300s budget",
-      "description": "Enable TTA in ultralytics (augment=True). Profile inference time. If too slow, use only horizontal flip. Combine with WBF if using manual TTA.",
-      "success_criteria": "final_score improves while staying within 300s inference budget",
+      "title": "Two-stage: YOLO detector + crop classifier for classification boost",
+      "hypothesis": "A separate crop classifier trained on GT crops can improve classification_map50 from 0.71 to 0.80+, boosting final_score significantly since classification is the bottleneck",
+      "description": "Extract product crops from training images using GT bounding boxes. Train a lightweight classifier (EfficientNet-B0 or ResNet-50 via timm/torchvision) on these crops. At inference: detect with YOLO, crop detections, classify with separate model. Must fit within 300s and 420MB.",
+      "success_criteria": "classification_map50 > 0.75, final_score > 0.82",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 8,
       "type": "experiment",
-      "title": "Model ensemble with WBF",
-      "hypothesis": "Ensembling 2-3 models with Weighted Boxes Fusion improves detection by 2-5%",
-      "description": "Use best 2-3 trained models (different sizes/configs). Run all on test images, combine with WBF from ensemble_boxes. Must fit within 300s and 420MB.",
-      "success_criteria": "final_score improves by >2% over single best model",
+      "title": "TTA and model ensemble with WBF",
+      "hypothesis": "Test-time augmentation and/or ensembling 2 models with WBF improves detection by 2-3%",
+      "description": "Try TTA (horizontal flip + multi-scale) on best single model. If time permits, ensemble best 2 models with Weighted Boxes Fusion. Profile to ensure <300s inference.",
+      "success_criteria": "final_score > 0.83",
       "status": "pending",
       "experiment_id": null
     },
@@ -88,9 +88,9 @@
       "step": 9,
       "type": "experiment",
       "title": "Final optimization and submission",
-      "hypothesis": "Combining best detection + classification + optimized thresholds maximizes final_score",
-      "description": "Combine best approaches. Optimize all thresholds jointly. Profile inference to ensure <300s. Ensure model weights <420MB. Create final main.py.",
-      "success_criteria": "Best final_score achieved, inference <300s, weights <420MB",
+      "hypothesis": "Combining best approaches with jointly optimized thresholds maximizes final_score",
+      "description": "Combine best detection + classification approaches. Optimize all thresholds jointly. Profile inference to ensure <300s. Ensure model weights <420MB. Create final main.py.",
+      "success_criteria": "final_score > 0.83, inference <300s, weights <420MB",
       "status": "pending",
       "experiment_id": null
     }
