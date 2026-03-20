@@ -2,6 +2,117 @@ import json
 import random
 from pathlib import Path
 from collections import Counter, defaultdict
+from utils import evaluate_predictions, convert_coco_to_yolo
+
+def test_evaluation_function():
+    """Test the evaluation function with dummy predictions"""
+    print("=== Testing Evaluation Function ===")
+    
+    # Load val split to get ground truth
+    val_split_path = Path("data/val_split.json")
+    if not val_split_path.exists():
+        print(f"❌ Val split not found at {val_split_path}")
+        return False
+    
+    with open(val_split_path, 'r') as f:
+        val_split = json.load(f)
+    
+    print(f"Val split: {len(val_split['images'])} images, {len(val_split['annotations'])} annotations")
+    
+    # Create dummy predictions - mix of correct and incorrect
+    dummy_predictions = []
+    
+    for i, ann in enumerate(val_split['annotations'][:50]):  # Test with first 50 annotations
+        # Create a prediction that's close to the ground truth
+        bbox = ann['bbox'].copy()
+        
+        # Add some noise to bbox
+        bbox[0] += random.uniform(-5, 5)  # x offset
+        bbox[1] += random.uniform(-5, 5)  # y offset
+        bbox[2] *= random.uniform(0.9, 1.1)  # width scale
+        bbox[3] *= random.uniform(0.9, 1.1)  # height scale
+        
+        # Sometimes use correct category, sometimes wrong
+        if i % 3 == 0:  # 1/3 correct classifications
+            category_id = ann['category_id']
+        else:  # 2/3 wrong classifications
+            category_id = random.randint(0, 356)
+        
+        dummy_predictions.append({
+            'image_id': ann['image_id'],
+            'category_id': category_id,
+            'bbox': bbox,
+            'score': random.uniform(0.5, 0.95)
+        })
+    
+    print(f"Created {len(dummy_predictions)} dummy predictions")
+    
+    # Test evaluation
+    try:
+        val_score, det_map, cls_map = evaluate_predictions(dummy_predictions, val_split)
+        print(f"✓ Evaluation successful:")
+        print(f"  Detection mAP@0.5: {det_map:.4f}")
+        print(f"  Classification mAP@0.5: {cls_map:.4f}")
+        print(f"  Combined val_score: {val_score:.4f}")
+        return True
+    except Exception as e:
+        print(f"❌ Evaluation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def test_yolo_conversion():
+    """Test COCO to YOLO format conversion"""
+    print("\n=== Testing YOLO Conversion ===")
+    
+    # Check if splits exist
+    train_split_path = Path("data/train_split.json")
+    val_split_path = Path("data/val_split.json")
+    
+    if not train_split_path.exists() or not val_split_path.exists():
+        print("❌ Train/val splits not found")
+        return False
+    
+    # Convert to YOLO format
+    try:
+        train_success = convert_coco_to_yolo(
+            coco_json_path=train_split_path,
+            images_dir=Path("data/train/images"),
+            output_dir=Path("data/yolo_train"),
+            split_name="train"
+        )
+        
+        val_success = convert_coco_to_yolo(
+            coco_json_path=val_split_path,
+            images_dir=Path("data/train/images"),
+            output_dir=Path("data/yolo_val"),
+            split_name="val"
+        )
+        
+        if train_success and val_success:
+            print("✓ YOLO conversion successful")
+            
+            # Check output structure
+            train_dir = Path("data/yolo_train")
+            val_dir = Path("data/yolo_val")
+            data_yaml = Path("data/data.yaml")
+            
+            print(f"  Train images: {len(list(train_dir.glob('*.jpg')))}")
+            print(f"  Train labels: {len(list(train_dir.glob('*.txt')))}")
+            print(f"  Val images: {len(list(val_dir.glob('*.jpg')))}")
+            print(f"  Val labels: {len(list(val_dir.glob('*.txt')))}")
+            print(f"  Data YAML exists: {data_yaml.exists()}")
+            
+            return True
+        else:
+            print("❌ YOLO conversion failed")
+            return False
+            
+    except Exception as e:
+        print(f"❌ YOLO conversion error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def create_train_val_splits():
     """Create 90/10 train/val splits stratified by image with seed=42"""
@@ -202,47 +313,45 @@ def validate_splits():
     return True
 
 def main():
-    """Main experiment: Create splits and verify environment"""
-    print("=== Step 3: Create Train/Val Splits and Verify Environment ===")
+    """Main experiment: Build evaluation function and YOLO dataset conversion"""
+    print("=== Step 4: Build Evaluation Function and YOLO Dataset Conversion ===")
     
-    # Create splits
-    splits_created = create_train_val_splits()
+    # Ensure splits exist
+    if not Path("data/train_split.json").exists():
+        print("Creating train/val splits first...")
+        splits_created = create_train_val_splits()
+        if not splits_created:
+            print("❌ Failed to create splits")
+            return
     
-    # Validate splits
-    splits_valid = validate_splits() if splits_created else False
+    # Test evaluation function
+    eval_success = test_evaluation_function()
     
-    # Check environment
-    env_ready = check_environment()
+    # Test YOLO conversion
+    yolo_success = test_yolo_conversion()
     
     # Print summary
     print("\n=== Summary ===")
-    print(f"Splits created: {'✓' if splits_created else '❌'}")
-    print(f"Splits valid: {'✓' if splits_valid else '❌'}")
-    print(f"Environment ready: {'✓' if env_ready else '❌'}")
+    print(f"Evaluation function: {'✓' if eval_success else '❌'}")
+    print(f"YOLO conversion: {'✓' if yolo_success else '❌'}")
     
     # Metrics for tracking
-    if splits_valid:
-        # Load final split info for metrics
-        with open("data/train_split.json", 'r') as f:
-            train_split = json.load(f)
-        with open("data/val_split.json", 'r') as f:
-            val_split = json.load(f)
-        
-        train_images = len(train_split['images'])
-        val_images = len(val_split['images'])
-        val_ratio = val_images / (train_images + val_images)
-        
-        print(f"METRIC:train_images={train_images}")
-        print(f"METRIC:val_images={val_images}")
-        print(f"METRIC:val_ratio={val_ratio:.3f}")
-        print(f"METRIC:splits_created={1 if splits_created else 0}")
-        print(f"METRIC:environment_ready={1 if env_ready else 0}")
-    else:
-        print("METRIC:splits_created=0")
-        print(f"METRIC:environment_ready={1 if env_ready else 0}")
+    print(f"METRIC:eval_function_works={1 if eval_success else 0}")
+    print(f"METRIC:yolo_conversion_works={1 if yolo_success else 0}")
     
-    if splits_created and splits_valid and env_ready:
-        print("\n🎉 Ready for training experiments!")
+    if eval_success and yolo_success:
+        print("\n🎉 Ready for YOLO training experiments!")
+        
+        # Check YOLO dataset structure
+        train_images = len(list(Path("data/yolo_train").glob("*.jpg")))
+        train_labels = len(list(Path("data/yolo_train").glob("*.txt")))
+        val_images = len(list(Path("data/yolo_val").glob("*.jpg")))
+        val_labels = len(list(Path("data/yolo_val").glob("*.txt")))
+        
+        print(f"METRIC:train_images_yolo={train_images}")
+        print(f"METRIC:train_labels_yolo={train_labels}")
+        print(f"METRIC:val_images_yolo={val_images}")
+        print(f"METRIC:val_labels_yolo={val_labels}")
     else:
         print("\n⚠ Issues found - check logs above")
 

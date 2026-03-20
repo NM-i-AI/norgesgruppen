@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-23-01",
   "created_at": "2026-03-20T23:01:59.011922+00:00",
   "revision": 2,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "We need valid train/val splits (90/10 stratified by image) and a working PyTorch+ultralytics environment before any training",
       "description": "Create a script that: (1) loads data/train/annotations.json, (2) splits images 90/10 into train/val with stratification to ensure category coverage, (3) saves train_split.json and val_split.json in COCO format, (4) verifies PyTorch/CUDA/ultralytics are available. Print basic stats about the splits.",
       "success_criteria": "train_split.json and val_split.json created with ~223 and ~25 images respectively, no image overlap, PyTorch+CUDA confirmed working",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,

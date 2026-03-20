@@ -24,3 +24,11 @@
 - Result: Splits created successfully (224 train/24 val images, 9.7% val ratio) but environment validation failed - all required packages (PyTorch, ultralytics, pycocotools, numpy, scipy, scikit-learn, timm) are missing
 - Side effects: Category distribution shows 130 categories only in train and 6 only in val, indicating potential class imbalance issues for validation
 - Takeaway: The data splits are ready but the Python environment needs all ML packages installed before any training can proceed.
+
+## Experiment 4 — Build evaluation function and YOLO dataset conversion
+- Status: FAILED
+- Hypothesis: We need a reusable eval function and YOLO-format data before any training
+- Change: Implemented evaluation function using pycocotools and COCO-to-YOLO conversion function
+- Result: YOLO conversion succeeded (248 images converted), but evaluation function failed due to missing pycocotools dependency
+- Side effects: None observed
+- Takeaway: Need to install pycocotools dependency before the evaluation function can work, but YOLO dataset conversion is ready for training.
