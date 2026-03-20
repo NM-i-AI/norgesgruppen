@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
   "revision": 5,
-  "current_step": 9,
+  "current_step": 10,
   "plan": [
     {
       "step": 1,
@@ -91,8 +91,8 @@
       "hypothesis": "TTA (augment=True in YOLO predict) applies horizontal flip and multi-scale inference, improving both detection and classification mAP by 1-3% with no retraining needed",
       "description": "Load the best model from exp-006 training run. Run inference with augment=True on validation set. Compare metrics with and without TTA. This is zero-cost improvement that just requires changing the predict call.",
       "success_criteria": "final_score > 0.8498 (improvement over exp-006)",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-009"
     },
     {
       "step": 10,
