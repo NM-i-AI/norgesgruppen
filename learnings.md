@@ -39,3 +39,11 @@
 - Result: ModuleNotFoundError for 'ultralytics' - the main YOLO library is missing from the environment
 - Side effects: N/A - code failed to start
 - Takeaway: The environment is missing the core ultralytics package, which must be installed before any YOLO experiments can run.
+
+## Experiment 6 — Discover available packages in the environment
+- Status: FAILED
+- Hypothesis: By probing which packages are importable, we can determine what tools are available for building our detection/classification pipeline
+- Change: Created a comprehensive package discovery script in scratch.py that probes the environment for available ML packages
+- Result: Script failed due to PyTorch 2.6 weights_only security change when loading YOLOv8 pretrained models
+- Side effects: Discovered that the environment has PyTorch 2.6+ which enforces stricter model loading security by default
+- Takeaway: The environment has modern PyTorch but YOLOv8 model loading fails due to security restrictions that can be bypassed with weights_only=False if the source is trusted.

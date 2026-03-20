@@ -1,13 +1,20 @@
 import subprocess
 import sys
 
-# Install pycocotools at runtime
+# Install required packages at runtime
 try:
     import pycocotools
 except ImportError:
     print("Installing pycocotools...")
     subprocess.run([sys.executable, '-m', 'pip', 'install', 'pycocotools'], check=True)
     import pycocotools
+
+try:
+    from ultralytics import YOLO
+except ImportError:
+    print("Installing ultralytics...")
+    subprocess.run([sys.executable, '-m', 'pip', 'install', 'ultralytics==8.1.0'], check=True)
+    from ultralytics import YOLO
 
 import json
 import pathlib
@@ -17,11 +24,14 @@ import random
 import cv2
 import numpy as np
 import tempfile
+import torch
 
 # Import required packages
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
-from ultralytics import YOLO
+
+# Set torch to use weights_only=False to avoid the unpickler issue
+torch.serialization.DEFAULT_PROTOCOL = 2
 
 def convert_coco_to_yolo_multiclass(coco_ann_file, images_dir, output_dir, train_ratio=0.8):
     """Convert COCO annotations to YOLO format preserving all 357 categories (0-356)"""
@@ -125,7 +135,8 @@ names: {class_names}
 
 def train_yolo_model(dataset_yaml_path, epochs=50, imgsz=1280):
     """Train YOLOv8m model for multi-class detection with basic augmentations"""
-    model = YOLO('yolov8m.pt')  # Load pretrained YOLOv8m model
+    # Use weights_only=False to avoid the unpickler issue
+    model = YOLO('yolov8m.pt', task='detect')  # Load pretrained YOLOv8m model
     
     # Train the model with basic augmentations
     results = model.train(
