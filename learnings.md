@@ -15,3 +15,11 @@
 - Result: Import error - pycocotools module not found, preventing execution
 - Side effects: None observed due to early failure
 - Takeaway: The pycocotools dependency needs to be installed before the experiment can run.
+
+## Experiment 3 — Multi-class YOLOv8m detection at 1280px
+- Status: FAILED
+- Hypothesis: Training with all 356 categories enables both detection and classification scoring, achieving final_score > 0.50 (0.7*det + 0.3*cls)
+- Change: Modified baseline to train with all 356 categories, added classification evaluation, increased epochs to 80, reduced batch size to 6
+- Result: Import error - missing pycocotools dependency
+- Side effects: None (failed before execution)
+- Takeaway: The pycocotools library needs to be installed before running multi-class experiments that use COCO evaluation functions.

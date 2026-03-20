@@ -12,8 +12,8 @@ from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from ultralytics import YOLO
 
-def convert_coco_to_yolo_single_class(coco_ann_file, images_dir, output_dir, train_ratio=0.8):
-    """Convert COCO annotations to YOLO format with ALL categories mapped to class 0"""
+def convert_coco_to_yolo_multiclass(coco_ann_file, images_dir, output_dir, train_ratio=0.8):
+    """Convert COCO annotations to YOLO format preserving all 357 categories (0-356)"""
     
     with open(coco_ann_file, 'r') as f:
         coco_data = json.load(f)
@@ -43,8 +43,12 @@ def convert_coco_to_yolo_single_class(coco_ann_file, images_dir, output_dir, tra
     train_image_ids = image_ids[:split_idx]
     val_image_ids = image_ids[split_idx:]
     
+    # Get category info
+    categories = {cat['id']: cat['name'] for cat in coco_data['categories']}
+    num_categories = len(categories)
+    
     print(f"Train images: {len(train_image_ids)}, Val images: {len(val_image_ids)}")
-    print(f"Single-class detection: ALL categories mapped to class 0")
+    print(f"Multi-class detection: {num_categories} categories (0-{max(categories.keys())})")
     
     def process_split(image_ids, images_dir_out, labels_dir_out, split_name):
         for image_id in image_ids:
@@ -74,8 +78,8 @@ def convert_coco_to_yolo_single_class(coco_ann_file, images_dir, output_dir, tra
                 norm_width = w / img_width
                 norm_height = h / img_height
                 
-                # SINGLE CLASS: Map ALL categories to class 0
-                class_id = 0
+                # MULTI-CLASS: Keep original category_id
+                class_id = ann['category_id']
                 
                 yolo_annotations.append(f"{class_id} {x_center:.6f} {y_center:.6f} {norm_width:.6f} {norm_height:.6f}")
             
@@ -88,22 +92,28 @@ def convert_coco_to_yolo_single_class(coco_ann_file, images_dir, output_dir, tra
     process_split(train_image_ids, train_images_dir, train_labels_dir, 'train')
     process_split(val_image_ids, val_images_dir, val_labels_dir, 'val')
     
-    # Create dataset.yaml for single class
+    # Create dataset.yaml for all categories
+    # Create class names list (0-356)
+    max_cat_id = max(categories.keys())
+    class_names = ['unknown'] * (max_cat_id + 1)  # Initialize with 'unknown'
+    for cat_id, cat_name in categories.items():
+        class_names[cat_id] = cat_name
+    
     dataset_yaml = f"""path: {output_path.absolute()}
 train: train/images
 val: val/images
 
-nc: 1
-names: ['product']
+nc: {len(class_names)}
+names: {class_names}
 """
     
     with open(output_path / 'dataset.yaml', 'w') as f:
         f.write(dataset_yaml)
     
-    return train_image_ids, val_image_ids
+    return train_image_ids, val_image_ids, categories
 
-def train_yolo_model(dataset_yaml_path, epochs=50, imgsz=1280):
-    """Train YOLOv8m model for single-class detection"""
+def train_yolo_model(dataset_yaml_path, epochs=80, imgsz=1280):
+    """Train YOLOv8m model for multi-class detection"""
     model = YOLO('yolov8m.pt')  # Load pretrained YOLOv8m model
     
     # Train the model
@@ -111,17 +121,17 @@ def train_yolo_model(dataset_yaml_path, epochs=50, imgsz=1280):
         data=dataset_yaml_path,
         epochs=epochs,
         imgsz=imgsz,
-        batch=8,  # Batch size for YOLOv8m at 1280px
+        batch=6,  # Reduced batch size for multi-class at 1280px
         device=0,  # Use GPU
         project='runs/detect',
-        name='yolov8m_single_class',
+        name='yolov8m_multiclass',
         save=True,
         verbose=True,
         # Training hyperparameters
         lr0=0.01,        # Initial learning rate
         weight_decay=0.0005,
         warmup_epochs=3,
-        patience=20      # Early stopping patience
+        patience=25      # Early stopping patience
     )
     
     return model, results
@@ -159,7 +169,7 @@ def convert_yolo_to_coco_predictions(model, val_image_ids, image_info, output_fi
                     
                     prediction = {
                         "image_id": image_id,
-                        "category_id": 0,  # Single class
+                        "category_id": cls,  # Multi-class: preserve predicted class
                         "bbox": [x, y, w, h],
                         "score": float(conf)
                     }
@@ -193,9 +203,16 @@ def evaluate_detection_map(gt_ann_file, pred_file, val_image_ids):
     for ann in val_gt_data['annotations']:
         ann['category_id'] = 0
     
-    # Load predictions
+    # Load predictions and convert to single class for detection eval
     with open(pred_file, 'r') as f:
         predictions = json.load(f)
+    
+    # Convert predictions to single class for detection evaluation
+    det_predictions = []
+    for pred in predictions:
+        det_pred = pred.copy()
+        det_pred['category_id'] = 0  # Map all predictions to class 0
+        det_predictions.append(det_pred)
     
     # Save temporary files
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -203,7 +220,7 @@ def evaluate_detection_map(gt_ann_file, pred_file, val_image_ids):
         val_gt_file = f.name
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(predictions, f)
+        json.dump(det_predictions, f)
         det_pred_file = f.name
     
     try:
@@ -229,8 +246,62 @@ def evaluate_detection_map(gt_ann_file, pred_file, val_image_ids):
         pathlib.Path(val_gt_file).unlink(missing_ok=True)
         pathlib.Path(det_pred_file).unlink(missing_ok=True)
 
+def evaluate_classification_map(gt_ann_file, pred_file, val_image_ids, categories):
+    """Evaluate classification mAP@0.5 (category aware)"""
+    
+    # Load ground truth
+    with open(gt_ann_file, 'r') as f:
+        gt_data = json.load(f)
+    
+    # Filter ground truth to validation images only
+    val_images = [img for img in gt_data['images'] if img['id'] in val_image_ids]
+    val_annotations = [ann for ann in gt_data['annotations'] if ann['image_id'] in val_image_ids]
+    
+    # Create validation ground truth file for classification (all categories)
+    val_gt_data = {
+        'images': val_images,
+        'annotations': val_annotations,
+        'categories': [{'id': cat_id, 'name': cat_name, 'supercategory': 'product'} 
+                      for cat_id, cat_name in categories.items()]
+    }
+    
+    # Load predictions (keep original category_ids)
+    with open(pred_file, 'r') as f:
+        predictions = json.load(f)
+    
+    # Save temporary files
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(val_gt_data, f)
+        val_gt_file = f.name
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(predictions, f)
+        cls_pred_file = f.name
+    
+    try:
+        # Load COCO ground truth and predictions
+        coco_gt = COCO(val_gt_file)
+        coco_dt = coco_gt.loadRes(cls_pred_file)
+        
+        # Run evaluation
+        coco_eval = COCOeval(coco_gt, coco_dt, 'bbox')
+        coco_eval.params.iouThrs = [0.5]  # mAP@0.5 only
+        coco_eval.evaluate()
+        coco_eval.accumulate()
+        coco_eval.summarize()
+        
+        # Extract mAP@0.5
+        map_50 = coco_eval.stats[1]  # mAP@0.5
+        
+        return map_50
+        
+    finally:
+        # Clean up temporary files
+        pathlib.Path(val_gt_file).unlink(missing_ok=True)
+        pathlib.Path(cls_pred_file).unlink(missing_ok=True)
+
 def main():
-    print("=== YOLOv8m Single-Class Detection Baseline ===")
+    print("=== YOLOv8m Multi-Class Detection Experiment ===")
     
     # Set random seed for reproducibility
     random.seed(42)
@@ -240,20 +311,20 @@ def main():
     images_dir = 'data/train/images'
     yolo_dataset_dir = 'yolo_dataset'
     
-    # Step 1: Convert COCO to YOLO format with single class (all categories -> class 0)
-    print("\n1. Converting COCO annotations to YOLO format (single-class)...")
-    train_image_ids, val_image_ids = convert_coco_to_yolo_single_class(
+    # Step 1: Convert COCO to YOLO format with all categories (0-356)
+    print("\n1. Converting COCO annotations to YOLO format (multi-class)...")
+    train_image_ids, val_image_ids, categories = convert_coco_to_yolo_multiclass(
         coco_ann_file, images_dir, yolo_dataset_dir, train_ratio=0.8
     )
     
     # Step 2: Train YOLOv8m model
     print("\n2. Training YOLOv8m model...")
     dataset_yaml_path = f"{yolo_dataset_dir}/dataset.yaml"
-    model, results = train_yolo_model(dataset_yaml_path, epochs=50, imgsz=1280)
+    model, results = train_yolo_model(dataset_yaml_path, epochs=80, imgsz=1280)
     
     # Step 3: Load best model for inference
     print("\n3. Loading best trained model...")
-    best_model_path = 'runs/detect/yolov8m_single_class/weights/best.pt'
+    best_model_path = 'runs/detect/yolov8m_multiclass/weights/best.pt'
     model = YOLO(best_model_path)
     
     # Step 4: Generate predictions on validation set
@@ -270,17 +341,22 @@ def main():
     print(f"Generated {len(predictions)} predictions")
     
     # Step 5: Evaluate detection mAP@0.5 (category agnostic)
-    print("\n5. Evaluating detection mAP@0.5...")
+    print("\n5. Evaluating detection mAP@0.5 (category agnostic)...")
     detection_map_50 = evaluate_detection_map(
         coco_ann_file, predictions_file, val_image_ids
     )
     
-    # Calculate final score (detection only, classification = 0)
-    classification_map_50 = 0.0  # No classification in single-class baseline
+    # Step 6: Evaluate classification mAP@0.5 (category aware)
+    print("\n6. Evaluating classification mAP@0.5 (category aware)...")
+    classification_map_50 = evaluate_classification_map(
+        coco_ann_file, predictions_file, val_image_ids, categories
+    )
+    
+    # Calculate final score
     final_score = 0.7 * detection_map_50 + 0.3 * classification_map_50
     
     print(f"\nDetection mAP@0.5: {detection_map_50:.4f}")
-    print(f"Classification mAP@0.5: {classification_map_50:.4f} (single-class baseline)")
+    print(f"Classification mAP@0.5: {classification_map_50:.4f}")
     print(f"Final Score: {final_score:.4f}")
     
     # Print metrics in required format
@@ -290,11 +366,12 @@ def main():
     print(f"METRIC:val_predictions={len(predictions)}")
     print(f"METRIC:train_images={len(train_image_ids)}")
     print(f"METRIC:val_images={len(val_image_ids)}")
-    print(f"METRIC:num_classes=1")
+    print(f"METRIC:num_classes={len(categories)}")
     
-    print("\n=== Single-Class Detection Baseline Complete ===")
+    print("\n=== Multi-Class Detection Experiment Complete ===")
     print(f"Detection mAP@0.5: {detection_map_50:.4f}")
-    print(f"Final Score (70% detection only): {final_score:.4f}")
+    print(f"Classification mAP@0.5: {classification_map_50:.4f}")
+    print(f"Final Score (70% detection + 30% classification): {final_score:.4f}")
     print(f"Predictions saved to: {predictions_file}")
     print(f"Model saved to: {best_model_path}")
 

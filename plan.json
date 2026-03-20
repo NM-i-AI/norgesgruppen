@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-11-51",
   "created_at": "2026-03-20T11:51:33.547028+00:00",
   "revision": 1,
-  "current_step": 2,
+  "current_step": 3,
   "plan": [
     {
       "step": 1,
@@ -21,8 +21,8 @@
       "hypothesis": "A single-class YOLOv8m detector at 1280px trained for 50 epochs will achieve detection_mAP@0.5 > 0.60, giving final_score > 0.42 (with classification=0)",
       "description": "Fix the environment by ensuring ultralytics is properly imported. Convert COCO annotations to YOLO format with ALL categories mapped to class 0 (single-class detection). Split 80/20 train/val. Train YOLOv8m at imgsz=1280 for 50 epochs with batch=8. Evaluate detection mAP@0.5 on val set using pycocotools. This establishes a working baseline and validates the full pipeline. Key changes to main.py: simplify to single-class, use YOLOv8m (not l), reduce epochs to 50 for faster iteration.",
       "success_criteria": "Training completes, detection_mAP@0.5 > 0.50, pipeline produces valid predictions",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-002"
     },
     {
       "step": 3,
