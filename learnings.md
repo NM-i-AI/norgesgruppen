@@ -32,3 +32,11 @@
 - Result: Split created successfully with 0.097 validation ratio, but PIL installation failed (dependencies_ok=0.0 vs target 1.0)
 - Side effects: All images were categorized as "unassigned" section, preventing true stratification by store section
 - Takeaway: The split is functional for training despite PIL failure (Pillow likely already available), but store section metadata appears missing from the dataset.
+
+## Experiment 3 — Setup pipeline + YOLOv8n baseline at 640px
+- Status: FAILED
+- Hypothesis: A quick YOLOv8n baseline with 356 classes at 640px establishes metrics flow and a baseline val_score > 0.05
+- Change: Implemented complete YOLOv8n training pipeline with COCO annotation loading, 90/10 train/val split, YOLO format conversion, and model training setup
+- Result: Training failed with "operator torchvision::nms does not exist" error, val_score=0.0
+- Side effects: Pipeline infrastructure successfully created (data loading, splitting, format conversion all working)
+- Takeaway: The torchvision installation failed due to dependency conflicts, preventing YOLOv8 training from completing - need to fix PyTorch/torchvision compatibility before proceeding.
