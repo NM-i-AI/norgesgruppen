@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-23-26",
   "created_at": "2026-03-20T23:26:58.952830+00:00",
   "revision": 2,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "A proper evaluation setup is essential before any training",
       "description": "Install pycocotools, scikit-learn, ensemble-boxes. Create image-level 90/10 train/val split (seed=42), ensuring category coverage. Write COCO-format split JSONs. Implement eval function computing: detection_mAP@0.5 (all preds mapped to single class) and classification_mAP@0.5 (original category_ids), combined as val_score = 0.7*det + 0.3*cls. Convert COCO annotations to YOLO txt format for ultralytics (both nc=356 multi-class and nc=1 single-class versions). Create dataset YAML files. Verify with a dummy test.",
       "success_criteria": "Split files created, eval function returns sensible scores on dummy data, YOLO format files verified",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,

@@ -24,3 +24,11 @@
 - Result: Successfully created training pipeline with 20,236 train and 2,495 val annotations, evaluation function tested and working
 - Side effects: Minor numpy warning in evaluation function with dummy predictions, but core functionality works
 - Takeaway: Training infrastructure is now ready - can proceed with actual model training using either multi-class or single-class YOLO formats.
+
+## Experiment 4 — Baseline: YOLOv8m nc=356 at 1280px
+- Status: FAILED
+- Hypothesis: YOLOv8m at 1280px establishes a solid multi-class baseline for this dense detection task
+- Change: Added complete YOLOv8m training pipeline with image copying, model training (nc=356, imgsz=1280, 100 epochs), and evaluation functions
+- Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading YOLOv8m pretrained weights
+- Side effects: None observed (training never started)
+- Takeaway: Need to either set weights_only=False in torch.load or use torch.serialization.add_safe_globals to allow DetectionModel loading in newer PyTorch versions.
