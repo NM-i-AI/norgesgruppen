@@ -40,3 +40,11 @@
 - Result: Training failed with "operator torchvision::nms does not exist" error, val_score=0.0
 - Side effects: Pipeline infrastructure successfully created (data loading, splitting, format conversion all working)
 - Takeaway: The torchvision installation failed due to dependency conflicts, preventing YOLOv8 training from completing - need to fix PyTorch/torchvision compatibility before proceeding.
+
+## Experiment 3 — Write evaluation function and convert to YOLO format
+- Status: FAILED
+- Hypothesis: We can implement the val_score metric and prepare YOLO training data
+- Change: Implemented pycocotools-based evaluation function and YOLO format conversion with 5-epoch training test
+- Result: Training failed with "operator torchvision::nms does not exist" error, val_score=0.0
+- Side effects: Package installation issues with torch/torchvision compatibility
+- Takeaway: The evaluation function works but YOLOv8 training fails due to torchvision operator compatibility issues that need to be resolved before proceeding.
