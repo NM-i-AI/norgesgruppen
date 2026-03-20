@@ -16,3 +16,11 @@
 - Result: Train split file missing at data/train_split.json, PyTorch not available
 - Side effects: None (script failed before any heavy operations)
 - Takeaway: Must create the train/val splits and install PyTorch before proceeding with model training experiments.
+
+## Experiment 3 — Create train/val splits and verify environment
+- Status: FAILED
+- Hypothesis: We need valid train/val splits (90/10 stratified by image) and a working PyTorch+ultralytics environment before any training
+- Change: Implemented train/val split creation with 90/10 stratification by image using seed=42, plus environment validation for PyTorch, CUDA, ultralytics, and other required packages
+- Result: Splits created successfully (224 train/24 val images, 9.7% val ratio) but environment validation failed - all required packages (PyTorch, ultralytics, pycocotools, numpy, scipy, scikit-learn, timm) are missing
+- Side effects: Category distribution shows 130 categories only in train and 6 only in val, indicating potential class imbalance issues for validation
+- Takeaway: The data splits are ready but the Python environment needs all ML packages installed before any training can proceed.
