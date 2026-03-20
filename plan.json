@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-22-31",
   "created_at": "2026-03-20T22:31:40.610746+00:00",
   "revision": 2,
-  "current_step": 4,
+  "current_step": 5,
   "plan": [
     {
       "step": 1,
@@ -40,8 +40,8 @@
       "title": "Create train/val split, evaluation function, and YOLO dataset",
       "description": "Write scripts to: (1) Split annotations.json into train_split.json and val_split.json (90/10, seed=42, stratified by image). (2) Implement val_score = 0.7 * detection_mAP@0.5 + 0.3 * classification_mAP@0.5 evaluation using pycocotools COCOeval. (3) Convert COCO annotations to YOLO format for both splits. Create dataset YAML config for both nc=1 and nc=356 variants.",
       "success_criteria": "Split files created, YOLO format labels generated, evaluation function tested",
-      "status": "pending",
-      "experiment_id": null,
+      "status": "completed",
+      "experiment_id": "exp-004",
       "hypothesis": null
     },
     {

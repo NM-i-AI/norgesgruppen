@@ -32,3 +32,11 @@
 - Result: ValueError when creating YOLO dataset YAML - path resolution issue with relative_to() method
 - Side effects: Successfully created train/val splits and converted annotations to YOLO format before failure
 - Takeaway: The YOLO dataset YAML creation failed due to incorrect path handling; need to fix relative path calculation or use absolute paths instead.
+
+## Experiment 5 — Baseline: YOLOv8m nc=1 at 640
+- Status: FAILED
+- Hypothesis: A single-class YOLOv8m detector at 640px establishes a solid detection baseline, achieving detection_mAP@0.5 > 0.3
+- Change: Implemented YOLOv8m nc=1 baseline training with 80 epochs, batch size 16, image size 640
+- Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading YOLOv8m pretrained weights
+- Side effects: None (training never started)
+- Takeaway: Need to either set weights_only=False in torch.load or use torch.serialization.add_safe_globals to allowlist ultralytics classes for YOLOv8 pretrained weight loading.

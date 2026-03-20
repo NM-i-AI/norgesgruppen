@@ -16,6 +16,7 @@ from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 import tempfile
 import yaml
+from ultralytics import YOLO
 
 def create_train_val_split(annotations_path, train_output_path, val_output_path, val_ratio=0.1, seed=42):
     """
@@ -260,9 +261,9 @@ def create_yolo_dataset_yaml(train_dir, val_dir, nc=356, output_path='dataset.ya
         names = [f'category_{i}' for i in range(nc + 1)]  # 0-356 = 357 classes
     
     dataset_config = {
-        'path': str(Path.cwd()),  # Dataset root
-        'train': str(Path(train_dir).relative_to(Path.cwd())),
-        'val': str(Path(val_dir).relative_to(Path.cwd())),
+        'path': str(Path.cwd().resolve()),  # Use absolute path
+        'train': str(Path(train_dir).resolve()),  # Use absolute paths
+        'val': str(Path(val_dir).resolve()),
         'nc': len(names),
         'names': names
     }
@@ -273,64 +274,73 @@ def create_yolo_dataset_yaml(train_dir, val_dir, nc=356, output_path='dataset.ya
     print(f"Created YOLO dataset config: {output_path}")
     return output_path
 
-def test_evaluation_function():
+def yolo_predictions_to_coco(yolo_results, val_coco_path, output_path):
     """
-    Test the evaluation function with dummy predictions.
+    Convert YOLO predictions to COCO format for evaluation.
     """
-    print("\n=== Testing Evaluation Function ===")
-    
-    # Create dummy predictions for validation set
-    val_coco_path = 'data/val_split.json'
-    
-    if not Path(val_coco_path).exists():
-        print(f"Validation split not found at {val_coco_path}")
-        return False
-    
-    # Load validation data to create dummy predictions
+    # Load validation COCO data to get image info
     with open(val_coco_path, 'r') as f:
         val_data = json.load(f)
     
-    # Create dummy predictions (random boxes with low confidence)
-    dummy_predictions = []
-    for img in val_data['images'][:3]:  # Test on first 3 images only
-        img_id = img['id']
-        img_width = img['width']
-        img_height = img['height']
+    # Create mapping from image filename to image info
+    filename_to_img = {}
+    for img in val_data['images']:
+        filename_to_img[img['file_name']] = img
+    
+    coco_predictions = []
+    
+    for result in yolo_results:
+        if result.boxes is None or len(result.boxes) == 0:
+            continue
+            
+        # Get image info
+        img_path = Path(result.path)
+        img_filename = img_path.name
         
-        # Add a few random predictions per image
-        for i in range(3):
-            x = random.uniform(0, img_width - 100)
-            y = random.uniform(0, img_height - 100)
-            w = random.uniform(50, 150)
-            h = random.uniform(50, 150)
+        if img_filename not in filename_to_img:
+            print(f"Warning: {img_filename} not found in validation set")
+            continue
+            
+        img_info = filename_to_img[img_filename]
+        img_id = img_info['id']
+        img_width = img_info['width']
+        img_height = img_info['height']
+        
+        # Convert each detection
+        boxes = result.boxes
+        for i in range(len(boxes)):
+            # Get box coordinates (xyxy format)
+            x1, y1, x2, y2 = boxes.xyxy[i].cpu().numpy()
+            
+            # Convert to COCO format (x, y, width, height)
+            x = float(x1)
+            y = float(y1)
+            width = float(x2 - x1)
+            height = float(y2 - y1)
+            
+            # Get confidence score
+            score = float(boxes.conf[i].cpu().numpy())
+            
+            # Get class ID (for nc=1, this will always be 0)
+            class_id = int(boxes.cls[i].cpu().numpy())
             
             pred = {
                 'image_id': img_id,
-                'category_id': random.randint(0, 356),
-                'bbox': [x, y, w, h],
-                'score': random.uniform(0.1, 0.9)
+                'category_id': class_id,
+                'bbox': [x, y, width, height],
+                'score': score
             }
-            dummy_predictions.append(pred)
+            coco_predictions.append(pred)
     
-    # Save dummy predictions
-    dummy_pred_path = 'dummy_predictions.json'
-    with open(dummy_pred_path, 'w') as f:
-        json.dump(dummy_predictions, f)
+    # Save predictions
+    with open(output_path, 'w') as f:
+        json.dump(coco_predictions, f)
     
-    try:
-        # Test evaluation
-        val_score, det_map, cls_map = compute_val_score(val_coco_path, dummy_pred_path)
-        print(f"Evaluation test successful: val_score={val_score:.4f}")
-        return True
-    except Exception as e:
-        print(f"Evaluation test failed: {e}")
-        return False
-    finally:
-        # Clean up
-        Path(dummy_pred_path).unlink(missing_ok=True)
+    print(f"Saved {len(coco_predictions)} predictions to {output_path}")
+    return coco_predictions
 
 def main():
-    print("=== Creating Train/Val Split and YOLO Dataset ===")
+    print("=== YOLOv8m nc=1 Baseline Training ===\n")
     
     # Set random seed for reproducibility
     random.seed(42)
@@ -342,72 +352,116 @@ def main():
     val_split_path = 'data/val_split.json'
     images_dir = 'data/train/images'
     
-    # Check if input files exist
-    if not Path(annotations_path).exists():
-        print(f"ERROR: Annotations file not found at {annotations_path}")
-        print("METRIC:split_created=0.0")
-        return
-    
-    if not Path(images_dir).exists():
-        print(f"ERROR: Images directory not found at {images_dir}")
-        print("METRIC:split_created=0.0")
-        return
-    
     try:
-        # Step 1: Create train/val split
-        print("\n=== Step 1: Creating Train/Val Split ===")
-        train_data, val_data = create_train_val_split(
-            annotations_path, train_split_path, val_split_path, val_ratio=0.1, seed=42
-        )
+        # Step 1: Create train/val split if not exists
+        if not Path(train_split_path).exists() or not Path(val_split_path).exists():
+            print("Creating train/val split...")
+            train_data, val_data = create_train_val_split(
+                annotations_path, train_split_path, val_split_path, val_ratio=0.1, seed=42
+            )
+        else:
+            print("Loading existing train/val split...")
+            with open(train_split_path, 'r') as f:
+                train_data = json.load(f)
+            with open(val_split_path, 'r') as f:
+                val_data = json.load(f)
         
-        # Step 2: Convert to YOLO format for nc=356 (full classification)
-        print("\n=== Step 2: Converting to YOLO Format (nc=356) ===")
-        train_yolo_dir = coco_to_yolo_format(train_data, images_dir, 'data/yolo_train_nc356', nc=356)
-        val_yolo_dir = coco_to_yolo_format(val_data, images_dir, 'data/yolo_val_nc356', nc=356)
-        
-        # Create dataset YAML for nc=356
-        dataset_yaml_356 = create_yolo_dataset_yaml(train_yolo_dir, val_yolo_dir, nc=356, output_path='dataset_nc356.yaml')
-        
-        # Step 3: Convert to YOLO format for nc=1 (detection only)
-        print("\n=== Step 3: Converting to YOLO Format (nc=1) ===")
-        train_yolo_dir_nc1 = coco_to_yolo_format(train_data, images_dir, 'data/yolo_train_nc1', nc=1)
-        val_yolo_dir_nc1 = coco_to_yolo_format(val_data, images_dir, 'data/yolo_val_nc1', nc=1)
+        # Step 2: Convert to YOLO format for nc=1
+        print("\nConverting to YOLO format (nc=1)...")
+        train_yolo_dir = coco_to_yolo_format(train_data, images_dir, 'data/yolo_train_nc1', nc=1)
+        val_yolo_dir = coco_to_yolo_format(val_data, images_dir, 'data/yolo_val_nc1', nc=1)
         
         # Create dataset YAML for nc=1
-        dataset_yaml_1 = create_yolo_dataset_yaml(train_yolo_dir_nc1, val_yolo_dir_nc1, nc=1, output_path='dataset_nc1.yaml')
+        dataset_yaml = create_yolo_dataset_yaml(train_yolo_dir, val_yolo_dir, nc=1, output_path='dataset_nc1.yaml')
         
-        # Step 4: Test evaluation function
-        print("\n=== Step 4: Testing Evaluation Function ===")
-        eval_test_success = test_evaluation_function()
+        # Step 3: Train YOLOv8m model
+        print("\nTraining YOLOv8m model (nc=1)...")
+        model = YOLO('yolov8m.pt')  # Load pretrained YOLOv8m
+        
+        # Training parameters
+        train_results = model.train(
+            data=dataset_yaml,
+            epochs=80,
+            imgsz=640,
+            batch=16,
+            name='yolov8m_nc1_baseline',
+            project='runs/detect',
+            save=True,
+            val=True,
+            plots=True,
+            device=0 if Path('/proc/driver/nvidia/version').exists() else 'cpu',  # Use GPU if available
+            workers=4,
+            patience=20,
+            close_mosaic=50,
+            seed=42
+        )
+        
+        print(f"Training completed. Best model saved to: {model.trainer.best}")
+        
+        # Step 4: Run validation on best model
+        print("\nRunning validation...")
+        best_model = YOLO(model.trainer.best)
+        
+        # Get validation image paths
+        val_img_paths = []
+        for img_info in val_data['images']:
+            img_path = Path(images_dir) / img_info['file_name']
+            val_img_paths.append(str(img_path))
+        
+        # Run inference on validation set
+        val_results = best_model.predict(
+            source=val_img_paths,
+            conf=0.01,  # Low confidence threshold to maximize recall
+            iou=0.7,    # NMS IoU threshold
+            save=False,
+            verbose=False
+        )
+        
+        # Convert predictions to COCO format
+        pred_coco_path = 'yolo_nc1_predictions.json'
+        yolo_predictions_to_coco(val_results, val_split_path, pred_coco_path)
+        
+        # Step 5: Evaluate using COCO metrics
+        print("\nEvaluating with COCO metrics...")
+        val_score, detection_map, classification_map = compute_val_score(val_split_path, pred_coco_path)
         
         # Report metrics
-        print("\n=== Summary ===")
-        print(f"Train images: {len(train_data['images'])}")
-        print(f"Val images: {len(val_data['images'])}")
-        print(f"Train annotations: {len(train_data['annotations'])}")
-        print(f"Val annotations: {len(val_data['annotations'])}")
+        print("\n=== Results ===\n")
+        print(f"Detection mAP@0.5: {detection_map:.4f}")
+        print(f"Classification mAP@0.5: {classification_map:.4f}")
+        print(f"Val Score: {val_score:.4f}")
         
-        print("METRIC:split_created=1.0")
-        print("METRIC:yolo_conversion_success=1.0")
-        print(f"METRIC:eval_function_test={'1.0' if eval_test_success else '0.0'}")
+        # Output metrics for orchestrator
+        print(f"METRIC:detection_map_50={detection_map:.4f}")
+        print(f"METRIC:classification_map_50={classification_map:.4f}")
+        print(f"METRIC:val_score={val_score:.4f}")
         print(f"METRIC:train_images={len(train_data['images'])}")
         print(f"METRIC:val_images={len(val_data['images'])}")
-        print(f"METRIC:train_annotations={len(train_data['annotations'])}")
-        print(f"METRIC:val_annotations={len(val_data['annotations'])}")
+        print(f"METRIC:model_size=yolov8m")
+        print(f"METRIC:input_size=640")
+        print(f"METRIC:num_classes=1")
+        print(f"METRIC:epochs=80")
+        print(f"METRIC:batch_size=16")
         
-        if eval_test_success:
-            print("METRIC:setup_complete=1.0")
-            print("✓ All setup tasks completed successfully!")
+        # Check if hypothesis is met
+        hypothesis_met = detection_map > 0.3
+        print(f"METRIC:hypothesis_met={'1.0' if hypothesis_met else '0.0'}")
+        
+        if hypothesis_met:
+            print("\n✓ Hypothesis met: detection_mAP@0.5 > 0.3")
         else:
-            print("METRIC:setup_complete=0.0")
-            print("⚠ Setup completed but evaluation function test failed")
+            print("\n✗ Hypothesis not met: detection_mAP@0.5 ≤ 0.3")
             
+        print(f"\n✓ YOLOv8m nc=1 baseline training completed successfully!")
+        
     except Exception as e:
         print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
-        print("METRIC:split_created=0.0")
-        print("METRIC:setup_complete=0.0")
+        print("METRIC:val_score=0.0")
+        print("METRIC:detection_map_50=0.0")
+        print("METRIC:classification_map_50=0.0")
+        print("METRIC:hypothesis_met=0.0")
 
 if __name__ == "__main__":
     main()
