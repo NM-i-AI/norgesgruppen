@@ -48,3 +48,11 @@
 - Result: final_score 0.7882 → 0.8498 (+7.8% improvement), classification_map50=0.8183, detection_map50=0.8633
 - Side effects: Longer training time (1257s) but substantial performance gains across all metrics
 - Takeaway: Using the full dataset for training provides significantly more benefit than expected, suggesting data scarcity was a major limiting factor.
+
+## Experiment 7 — Two-stage: YOLO detector + crop classifier for classification boost
+- Status: FAILED
+- Hypothesis: A separate crop classifier trained on GT crops can improve classification_map50 from ~0.71 to 0.80+, boosting final_score since classification is the weaker component
+- Change: Implemented two-stage approach with crop extraction, EfficientNet-B0 classifier training, and combined inference pipeline
+- Result: RuntimeError during crop classifier training - unable to allocate shared memory for DataLoader workers
+- Side effects: System ran out of shared memory resources during intensive data loading operations
+- Takeaway: The two-stage approach failed due to memory constraints; reduce DataLoader workers or batch size to avoid shared memory exhaustion.

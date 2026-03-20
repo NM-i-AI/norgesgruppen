@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
   "revision": 3,
-  "current_step": 6,
+  "current_step": 7,
   "plan": [
     {
       "step": 1,
@@ -61,8 +61,8 @@
       "hypothesis": "Using all 1000 images for training instead of 900 gives the model more data for rare categories, improving classification_map50 and boosting final_score by 1-2%",
       "description": "Modify the training pipeline to use ALL 1000 images for training (no validation split). Keep the same YOLOv8l architecture and hyperparameters from exp-004 (80 epochs, imgsz=1280, mixup=0.15, copy_paste=0.3, AdamW, cosine LR). For evaluation, still hold out the same 100 val images but train on all 1000. The submission model trains on all data. Use YOLO's built-in evaluation on the held-out set for comparison metrics.",
       "success_criteria": "final_score > 0.7882 (improvement over exp-004)",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-006"
     },
     {
       "step": 7,
