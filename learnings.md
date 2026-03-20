@@ -40,3 +40,11 @@
 - Result: Training failed due to missing ultralytics package (training_success=0.0)
 - Side effects: None - experiment did not execute
 - Takeaway: The ultralytics package needs to be installed before any YOLO experiments can proceed.
+
+## Experiment 6 — YOLOv8x with nc=356 at imgsz=1280
+- Status: FAILED
+- Hypothesis: Larger model improves both detection and classification on this dense dataset
+- Change: Updated to YOLOv8x model with increased patience (30 epochs) and maintained imgsz=1280
+- Result: Training failed due to missing ultralytics package dependency
+- Side effects: None (training never started)
+- Takeaway: The ultralytics package needs to be installed before any YOLO training can proceed.

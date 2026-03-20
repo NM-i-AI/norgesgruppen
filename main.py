@@ -4,9 +4,9 @@ from pathlib import Path
 from collections import Counter, defaultdict
 from utils import evaluate_predictions, convert_coco_to_yolo
 
-def train_yolov8m_baseline():
-    """Train YOLOv8m baseline with nc=356 at imgsz=1280"""
-    print("=== Training YOLOv8m Baseline ===")
+def train_yolov8x_baseline():
+    """Train YOLOv8x baseline with nc=356 at imgsz=1280"""
+    print("=== Training YOLOv8x Baseline ===")
     
     try:
         from ultralytics import YOLO
@@ -44,9 +44,9 @@ def train_yolov8m_baseline():
     
     print(f"✓ Using YOLO dataset at {data_yaml_path}")
     
-    # Initialize YOLOv8m model
-    print("Initializing YOLOv8m model...")
-    model = YOLO('yolov8m.pt')  # Load pretrained weights
+    # Initialize YOLOv8x model
+    print("Initializing YOLOv8x model...")
+    model = YOLO('yolov8x.pt')  # Load pretrained weights
     
     # Check GPU availability
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -59,15 +59,15 @@ def train_yolov8m_baseline():
     # Training parameters
     train_params = {
         'data': str(data_yaml_path),
-        'epochs': 100,
+        'epochs': 150,
         'imgsz': 1280,
         'batch': -1,  # Auto batch size
         'device': device,
         'project': 'runs/detect',
-        'name': 'yolov8m_baseline',
+        'name': 'yolov8x_baseline',
         'save': True,
         'save_period': 25,  # Save checkpoint every 25 epochs
-        'patience': 20,  # Early stopping patience
+        'patience': 30,  # Early stopping patience
         'verbose': True,
         'seed': 42,
         # Default augmentation settings
@@ -84,7 +84,7 @@ def train_yolov8m_baseline():
         'mosaic': 1.0,
         'mixup': 0.0,
         'copy_paste': 0.0,
-        'close_mosaic': 50  # Close mosaic augmentation at epoch 50
+        'close_mosaic': 30  # Close mosaic augmentation at epoch 30
     }
     
     print(f"Training parameters:")
@@ -288,8 +288,8 @@ def create_train_val_splits():
     return True
 
 def main():
-    """Main experiment: Train YOLOv8m baseline"""
-    print("=== Step 5: YOLOv8m Baseline Training ===")
+    """Main experiment: Train YOLOv8x baseline"""
+    print("=== Step 6: YOLOv8x Baseline Training ===")
     
     # Ensure splits exist
     if not Path("data/train_split.json").exists():
@@ -299,8 +299,8 @@ def main():
             print("❌ Failed to create splits")
             return
     
-    # Train YOLOv8m baseline
-    results, best_model_path, model = train_yolov8m_baseline()
+    # Train YOLOv8x baseline
+    results, best_model_path, model = train_yolov8x_baseline()
     
     if results is None:
         print("❌ Training failed")
@@ -319,9 +319,10 @@ def main():
             print(f"METRIC:val_score={val_score:.4f}")
             print(f"METRIC:detection_map={det_map:.4f}")
             print(f"METRIC:classification_map={cls_map:.4f}")
-            print(f"METRIC:model_size=yolov8m")
+            print(f"METRIC:model_size=yolov8x")
             print(f"METRIC:image_size=1280")
-            print(f"METRIC:epochs=100")
+            print(f"METRIC:epochs=150")
+            print(f"METRIC:close_mosaic=30")
             
             # Training metrics from results
             if hasattr(results, 'results_dict'):
@@ -329,7 +330,7 @@ def main():
                 if 'metrics/mAP50(B)' in train_metrics:
                     print(f"METRIC:train_map50={train_metrics['metrics/mAP50(B)']:.4f}")
             
-            print(f"\n🎉 YOLOv8m baseline complete! val_score = {val_score:.4f}")
+            print(f"\n🎉 YOLOv8x baseline complete! val_score = {val_score:.4f}")
         else:
             print("❌ Evaluation failed")
             print("METRIC:evaluation_success=0")
