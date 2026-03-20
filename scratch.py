@@ -227,16 +227,94 @@ def main():
     else:
         print("data/products/ directory not found")
     
+    # Cross-reference product codes between annotations and products directory
+    print("\n--- Product Code Cross-Reference ---")
+    try:
+        # Get product codes from annotations
+        ann_product_codes = set(ann.get('product_code') for ann in annotations if ann.get('product_code'))
+        ann_product_codes.discard(None)  # Remove None values
+        
+        # Get product codes from products directory
+        products_path = pathlib.Path('data/products')
+        if products_path.exists():
+            dir_product_codes = set(d.name for d in products_path.iterdir() if d.is_dir())
+        else:
+            dir_product_codes = set()
+        
+        # Get product codes from metadata
+        metadata_product_codes = set(p.get('product_code') for p in products if p.get('product_code'))
+        metadata_product_codes.discard(None)
+        
+        print(f"Product codes in annotations: {len(ann_product_codes)}")
+        print(f"Product codes in metadata: {len(metadata_product_codes)}")
+        print(f"Product directories: {len(dir_product_codes)}")
+        
+        # Find overlaps
+        ann_with_dirs = ann_product_codes & dir_product_codes
+        ann_without_dirs = ann_product_codes - dir_product_codes
+        dirs_without_ann = dir_product_codes - ann_product_codes
+        
+        print(f"\nAnnotated products with reference images: {len(ann_with_dirs)}/{len(ann_product_codes)} ({len(ann_with_dirs)/len(ann_product_codes)*100:.1f}%)")
+        print(f"Annotated products missing reference images: {len(ann_without_dirs)}")
+        print(f"Reference images without annotations: {len(dirs_without_ann)}")
+        
+        if ann_without_dirs:
+            print(f"\nSample annotated products missing reference images:")
+            for code in sorted(list(ann_without_dirs))[:5]:
+                print(f"  {code}")
+        
+        if dirs_without_ann:
+            print(f"\nSample reference images without annotations:")
+            for code in sorted(list(dirs_without_ann))[:5]:
+                print(f"  {code}")
+        
+    except Exception as e:
+        print(f"Error in product code cross-reference: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Verify sample file paths
+    print("\n--- File Path Verification ---")
+    try:
+        # Check sample train images
+        train_images_path = pathlib.Path('data/train/images')
+        if train_images_path.exists():
+            train_images = list(train_images_path.glob('*.jpg'))[:5]
+            print(f"Sample train images exist:")
+            for img_path in train_images:
+                exists = img_path.exists()
+                size = img_path.stat().st_size if exists else 0
+                print(f"  {img_path.name}: {exists} ({size} bytes)")
+        
+        # Check sample product reference images
+        if product_dirs:
+            sample_products = product_dirs[:3]
+            print(f"\nSample product reference images exist:")
+            for prod_dir in sample_products:
+                print(f"  {prod_dir.name}/:")
+                for img_file in prod_dir.glob('*.jpg'):
+                    size = img_file.stat().st_size
+                    print(f"    {img_file.name}: {size} bytes")
+        
+    except Exception as e:
+        print(f"Error in file path verification: {e}")
+        import traceback
+        traceback.print_exc()
+    
     # Summary
     print("\n=== DATASET SUMMARY ===")
-    print(f"• {len(images)} training images with {len(annotations)} annotations")
-    print(f"• {len(categories)} categories, {len(cat_counts)} have annotations")
-    print(f"• Severe class imbalance: {sum(1 for c in cat_counts.values() if c < 5)} categories have <5 examples")
-    print(f"• {with_images} products have reference images ({len(product_dirs)} directories found)")
-    print(f"• Average {len(annotations)/len(images):.1f} annotations per image")
-    print(f"• {corrected_count/len(annotations)*100:.1f}% of annotations are manually corrected")
-    print(f"• Detection challenge: dense shelves with {min(ann_counts)}-{max(ann_counts)} products per image")
-    print(f"• Classification challenge: 357 categories, many with very few examples")
+    try:
+        print(f"• {len(images)} training images with {len(annotations)} annotations")
+        print(f"• {len(categories)} categories, {len(cat_counts)} have annotations")
+        print(f"• Severe class imbalance: {sum(1 for c in cat_counts.values() if c < 5)} categories have <5 examples")
+        print(f"• {with_images} products have reference images ({len(product_dirs)} directories found)")
+        print(f"• Average {len(annotations)/len(images):.1f} annotations per image")
+        print(f"• {corrected_count/len(annotations)*100:.1f}% of annotations are manually corrected")
+        print(f"• Detection challenge: dense shelves with {min(ann_counts)}-{max(ann_counts)} products per image")
+        print(f"• Classification challenge: 357 categories, many with very few examples")
+        print(f"• Product code linkage: {len(ann_with_dirs)}/{len(ann_product_codes)} annotated products have reference images")
+    except:
+        print("Error generating summary - some variables not defined")
 
 if __name__ == "__main__":
     main()
