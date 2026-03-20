@@ -8,3 +8,11 @@
 - Result: Dataset contains 22,731 annotations across 1,000 images with 329 product categories, highly imbalanced distribution (top 10 categories have 50%+ annotations), wide variety of image sizes (720x960 to 5712x4284), and no overlap between annotated product codes and available reference images
 - Side effects: None
 - Takeaway: The dataset is highly imbalanced with unknown products being a significant category (422 annotations), requiring careful handling of class imbalance and potential data augmentation strategies.
+
+## Experiment 2 — Baseline: Single-class YOLOv8m detection
+- Status: SUCCESS
+- Hypothesis: A YOLOv8m model trained for single-class detection at image size 1280 can achieve detection_mAP@0.5 > 0.5, giving final_score > 0.35
+- Change: Implemented YOLOv8m baseline with COCO to YOLO format conversion, 90/10 train/val split, 30 epochs training at imgsz=1280 with max_det=300
+- Result: detection_mAP@0.5 = 0.9726, final_score = 0.6808 (far exceeding expectations)
+- Side effects: Training completed in 0.062 hours (~3.7 minutes), generated 361 predictions on 5 validation images
+- Takeaway: YOLOv8m achieves excellent detection performance (97.3% mAP@0.5) on this dataset, establishing a strong baseline that significantly exceeds the minimum threshold.

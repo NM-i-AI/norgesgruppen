@@ -1,0 +1,6 @@
+torch
+torchvision
+ultralytics
+pyyaml
+numpy
+pathlib
