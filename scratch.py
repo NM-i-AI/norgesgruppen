@@ -1,186 +1,168 @@
+import subprocess
+import sys
 import json
 from pathlib import Path
-from collections import defaultdict, Counter
 
-def get_image_dimensions(img_path):
-    """Get image dimensions without PIL as fallback"""
+def check_package_version(package_name):
+    """Check if a package is installed and return its version"""
     try:
-        from PIL import Image
-        with Image.open(img_path) as img:
-            return img.size  # (width, height)
-    except ImportError:
-        # PIL not available, skip dimension check
-        return None
+        result = subprocess.run([sys.executable, '-c', f'import {package_name}; print({package_name}.__version__)'], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            return result.stdout.strip()
+        else:
+            return None
     except Exception as e:
-        print(f"Error reading {img_path}: {e}")
         return None
+
+def check_torch_info():
+    """Check torch installation and CUDA availability"""
+    try:
+        import torch
+        print(f"PyTorch version: {torch.__version__}")
+        print(f"CUDA available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"CUDA version: {torch.version.cuda}")
+            print(f"GPU count: {torch.cuda.device_count()}")
+            for i in range(torch.cuda.device_count()):
+                gpu_name = torch.cuda.get_device_name(i)
+                gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+                print(f"GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
+        return True
+    except ImportError:
+        print("PyTorch not installed")
+        return False
+
+def check_torchvision_info():
+    """Check torchvision installation"""
+    try:
+        import torchvision
+        print(f"Torchvision version: {torchvision.__version__}")
+        return True
+    except ImportError:
+        print("Torchvision not installed")
+        return False
 
 def main():
-    print("=== Dataset Exploration ===")
+    print("=== Environment Check ===\n")
     
-    # 1. Count images in data/train/images/
-    images_dir = Path("data/train/images")
-    if images_dir.exists():
-        image_files = list(images_dir.glob("*.jpg")) + list(images_dir.glob("*.jpeg")) + list(images_dir.glob("*.png"))
-        print(f"\n1. Images: {len(image_files)} total")
-        
-        # Sample a few image dimensions
-        sample_dims = []
-        for i, img_path in enumerate(image_files[:10]):  # Sample first 10
-            dims = get_image_dimensions(img_path)
-            if dims:
-                sample_dims.append(dims)
-        
-        if sample_dims:
-            widths = [d[0] for d in sample_dims]
-            heights = [d[1] for d in sample_dims]
-            print(f"   Sample dimensions (first {len(sample_dims)}): {sample_dims}")
-            print(f"   Width range: {min(widths)}-{max(widths)}, Height range: {min(heights)}-{max(heights)}")
+    # Check Python version
+    print(f"Python version: {sys.version}")
+    print()
+    
+    # Check critical packages with required versions
+    critical_packages = {
+        'ultralytics': '8.1.0',
+        'torch': '2.6.0',  # May have +cu124 suffix
+        'torchvision': '0.21.0',  # May have +cu124 suffix
+        'timm': '0.9.12'
+    }
+    
+    print("=== Critical Package Versions ===")
+    all_critical_ok = True
+    
+    for package, required_version in critical_packages.items():
+        installed_version = check_package_version(package)
+        if installed_version:
+            # Handle torch/torchvision versions that may have +cu124 suffix
+            base_version = installed_version.split('+')[0]
+            if base_version == required_version or installed_version.startswith(required_version):
+                status = "✓ OK"
+            else:
+                status = "✗ VERSION MISMATCH"
+                all_critical_ok = False
+            print(f"{package}: {installed_version} (required: {required_version}) {status}")
         else:
-            print("   Could not read image dimensions (PIL not available)")
-    else:
-        print("\n1. Images directory not found!")
+            print(f"{package}: NOT INSTALLED ✗")
+            all_critical_ok = False
     
-    # 2. Examine annotations.json structure
-    annotations_path = Path("data/train/annotations.json")
-    if annotations_path.exists():
-        with open(annotations_path, 'r') as f:
-            coco_data = json.load(f)
-        
-        print(f"\n2. Annotations structure:")
-        print(f"   Keys: {list(coco_data.keys())}")
-        
-        # Categories
-        categories = coco_data.get('categories', [])
-        print(f"   Categories: {len(categories)} total")
-        if categories:
-            print(f"   Category ID range: {min(c['id'] for c in categories)} - {max(c['id'] for c in categories)}")
-            print(f"   Sample categories: {categories[:5]}")
-        
-        # Images
-        images = coco_data.get('images', [])
-        print(f"   Images: {len(images)} total")
-        if images:
-            print(f"   Sample image entry: {images[0]}")
-        
-        # Annotations
-        annotations = coco_data.get('annotations', [])
-        print(f"   Annotations: {len(annotations)} total")
-        if annotations:
-            print(f"   Sample annotation: {annotations[0]}")
-            
-            # Annotations per image
-            img_ann_count = defaultdict(int)
-            for ann in annotations:
-                img_ann_count[ann['image_id']] += 1
-            
-            ann_counts = list(img_ann_count.values())
-            mean_ann = sum(ann_counts) / len(ann_counts) if ann_counts else 0
-            print(f"   Annotations per image - Min: {min(ann_counts)}, Max: {max(ann_counts)}, Mean: {mean_ann:.1f}")
-            
-            # Category distribution
-            cat_counts = Counter(ann['category_id'] for ann in annotations)
-            print(f"   Categories with annotations: {len(cat_counts)}")
-            print(f"   Most common categories: {cat_counts.most_common(10)}")
-            print(f"   Least common categories: {cat_counts.most_common()[-10:]}")
-            
-            # Categories with very few annotations
-            rare_cats = sum(1 for count in cat_counts.values() if count <= 5)
-            print(f"   Categories with ≤5 annotations: {rare_cats}")
-            
-    else:
-        print("\n2. Annotations file not found!")
+    print()
     
-    # 3. Examine metadata.json
-    metadata_path = Path("data/metadata.json")
-    if metadata_path.exists():
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+    # Check other important packages
+    other_packages = [
+        'numpy', 'scipy', 'scikit-learn', 'matplotlib', 'tqdm', 'pillow',
+        'pycocotools', 'ensemble-boxes', 'supervision', 'albumentations',
+        'opencv-python', 'safetensors', 'onnxruntime-gpu'
+    ]
+    
+    print("=== Other Important Packages ===")
+    for package in other_packages:
+        # Handle package name variations
+        import_name = package
+        if package == 'pillow':
+            import_name = 'PIL'
+        elif package == 'opencv-python':
+            import_name = 'cv2'
+        elif package == 'scikit-learn':
+            import_name = 'sklearn'
+        elif package == 'onnxruntime-gpu':
+            import_name = 'onnxruntime'
         
-        print(f"\n3. Metadata structure:")
-        print(f"   Keys: {list(metadata.keys())}")
-        
-        if 'products' in metadata:
-            products = metadata['products']
-            print(f"   Products: {len(products)} total")
-            
-            # Sample product entry - fix the bug here
-            if isinstance(products, dict):
-                sample_product = next(iter(products.values())) if products else None
-            elif isinstance(products, list):
-                sample_product = products[0] if products else None
+        version = check_package_version(import_name)
+        if version:
+            print(f"{package}: {version} ✓")
+        else:
+            print(f"{package}: NOT INSTALLED")
+    
+    print()
+    
+    # Check PyTorch and CUDA
+    print("=== PyTorch & CUDA Info ===")
+    torch_ok = check_torch_info()
+    print()
+    
+    # Check torchvision
+    print("=== Torchvision Info ===")
+    torchvision_ok = check_torchvision_info()
+    print()
+    
+    # Check data directory structure
+    print("=== Data Directory Check ===")
+    data_paths = [
+        "data/train/images",
+        "data/train/annotations.json",
+        "data/products",
+        "data/metadata.json"
+    ]
+    
+    data_ok = True
+    for path_str in data_paths:
+        path = Path(path_str)
+        if path.exists():
+            if path.is_dir():
+                count = len(list(path.iterdir()))
+                print(f"{path_str}: EXISTS (directory with {count} items) ✓")
             else:
-                sample_product = None
-                
-            if sample_product:
-                print(f"   Sample product: {sample_product}")
-            
-            # Count products with different image types
-            image_types = defaultdict(int)
-            if isinstance(products, dict):
-                product_values = products.values()
-            elif isinstance(products, list):
-                product_values = products
-            else:
-                product_values = []
-                
-            for product in product_values:
-                available_images = product.get('available_images', [])
-                for img_type in available_images:
-                    image_types[img_type] += 1
-            
-            print(f"   Image types available: {dict(image_types)}")
+                print(f"{path_str}: EXISTS (file) ✓")
+        else:
+            print(f"{path_str}: NOT FOUND ✗")
+            data_ok = False
+    
+    print()
+    
+    # Summary
+    print("=== Summary ===")
+    if all_critical_ok:
+        print("✓ All critical packages have correct versions")
     else:
-        print("\n3. Metadata file not found!")
+        print("✗ Some critical packages need to be installed/updated")
+        print("\nTo install correct versions:")
+        print("pip install ultralytics==8.1.0")
+        print("pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124")
+        print("pip install torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124")
+        print("pip install timm==0.9.12")
     
-    # 4. Examine reference product images
-    products_dir = Path("data/products")
-    if products_dir.exists():
-        product_dirs = [d for d in products_dir.iterdir() if d.is_dir()]
-        print(f"\n4. Reference product images:")
-        print(f"   Product directories: {len(product_dirs)}")
-        
-        # Sample a few product directories
-        sample_products = product_dirs[:5]
-        for prod_dir in sample_products:
-            image_files = list(prod_dir.glob("*.jpg")) + list(prod_dir.glob("*.jpeg")) + list(prod_dir.glob("*.png"))
-            print(f"   {prod_dir.name}: {len(image_files)} images - {[f.name for f in image_files]}")
-        
-        # Count total reference images
-        total_ref_images = 0
-        for prod_dir in product_dirs:
-            image_files = list(prod_dir.glob("*.jpg")) + list(prod_dir.glob("*.jpeg")) + list(prod_dir.glob("*.png"))
-            total_ref_images += len(image_files)
-        
-        print(f"   Total reference images: {total_ref_images}")
+    if torch_ok and torch.cuda.is_available():
+        print("✓ GPU available for training")
     else:
-        print("\n4. Products directory not found!")
+        print("✗ No GPU available - training will be very slow")
     
-    # 5. Check for store sections (if available in metadata)
-    if annotations_path.exists():
-        # Look for store section information in image filenames or metadata
-        print(f"\n5. Store sections analysis:")
-        
-        # Try to extract store sections from image filenames
-        section_counts = defaultdict(int)
-        if images_dir.exists():
-            for img_file in image_files:
-                filename = img_file.stem.lower()
-                # Look for section keywords
-                if 'egg' in filename:
-                    section_counts['Egg'] += 1
-                elif 'frokost' in filename:
-                    section_counts['Frokost'] += 1
-                elif 'knekkebrod' in filename:
-                    section_counts['Knekkebrod'] += 1
-                elif 'varmedrikker' in filename:
-                    section_counts['Varmedrikker'] += 1
-                else:
-                    section_counts['Unknown'] += 1
-        
-        print(f"   Store sections from filenames: {dict(section_counts)}")
+    if data_ok:
+        print("✓ All required data directories/files found")
+    else:
+        print("✗ Some data files missing")
     
-    print("\n=== Exploration Complete ===")
+    print("\n=== Environment Check Complete ===")
 
 if __name__ == "__main__":
     main()
