@@ -16,3 +16,11 @@
 - Result: All critical packages (ultralytics, torch, torchvision, timm) are missing; data directories are present and properly structured
 - Side effects: No GPU available which will make training extremely slow
 - Takeaway: Need to install all required packages before proceeding with any training experiments.
+
+## Experiment 3 — Install dependencies and verify GPU
+- Status: FAILED
+- Hypothesis: Installing torch with CUDA support will reveal GPU availability; all required packages can be installed
+- Change: Modified main.py to install required dependencies with specific versions and verify GPU availability
+- Result: packages_installed=0.0, gpu_available=1.0, setup_success=0.0 (torch/torchvision installation failed due to incorrect pip syntax)
+- Side effects: Some packages (ultralytics, timm, pycocotools, ensemble-boxes) installed successfully; existing torch 2.10.0+cu128 already available
+- Takeaway: The pip install command syntax was incorrect for specifying index URLs - need to use separate --index-url flag, not inline with package specification.
