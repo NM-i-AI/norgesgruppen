@@ -1,1 +1,168 @@
-{}
+{
+  "session_id": "2026-03-20-12-11",
+  "created_at": "2026-03-20T12:11:57.856806+00:00",
+  "revision": 0,
+  "current_step": 1,
+  "plan": [
+    {
+      "step": 1,
+      "type": "exploration",
+      "title": "Explore dataset structure and statistics",
+      "hypothesis": null,
+      "description": "Write scratch.py to: (1) Load annotations.json and examine structure, (2) Count images, annotations, categories, (3) Compute annotations-per-image distribution, (4) Compute category frequency distribution (how many categories have <5, <10, <20 annotations), (5) Check image sizes, (6) Examine product reference images structure (how many products, what angles), (7) Check overlap between annotation product_codes and available product image folders, (8) Check how many annotations have corrected=true vs false.",
+      "success_criteria": "Complete statistical summary of the dataset logged, understanding of class imbalance and data availability",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 2,
+      "type": "exploration",
+      "title": "Examine annotation quality and visual characteristics",
+      "hypothesis": null,
+      "description": "Write scratch.py to: (1) Visualize a few sample images with their bounding boxes drawn, (2) Check bbox size distribution (min/max/median area), (3) Check for any overlapping/duplicate annotations, (4) Look at category 356 (unknown_product) frequency, (5) Examine a few product reference images to understand quality, (6) Check if train/test split info exists or if we need to create our own validation split.",
+      "success_criteria": "Visual confirmation of data quality, understanding of bbox characteristics, validation split strategy decided",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 3,
+      "type": "experiment",
+      "title": "Baseline: YOLOv8 detection-only (all category_id=0)",
+      "hypothesis": "A YOLOv8m model trained for detection-only (single class) can achieve detection_mAP@0.5 > 0.5, giving final_score > 0.35",
+      "description": "Convert COCO annotations to YOLO format with a single class (product). Create a train/val split (e.g., 80/20 stratified by store section if possible). Train YOLOv8m with appropriate settings for dense detection (high max_det, suitable image size like 1280). Generate predictions on validation set, compute detection mAP@0.5 and final_score. Save the model weights. Create submission script in main.py.",
+      "success_criteria": "detection_mAP@0.5 > 0.50, final_score > 0.35",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 4,
+      "type": "experiment",
+      "title": "Optimize detection: YOLOv8l/x with larger image size",
+      "hypothesis": "Larger YOLOv8 model (l or x) with image size 1280-1600 improves detection mAP by 5-10%",
+      "description": "Train YOLOv8l or YOLOv8x with image size 1280 or higher, more epochs, and tuned hyperparameters (lower confidence threshold, higher NMS IoU threshold for dense scenes). Use augmentations suitable for shelf images (horizontal flip, scale, mosaic). Compare with baseline.",
+      "success_criteria": "detection_mAP@0.5 improvement of at least 3% over step 3",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 5,
+      "type": "experiment",
+      "title": "Multi-class YOLOv8 detection+classification",
+      "hypothesis": "Training YOLOv8 with all 357 categories directly achieves classification_mAP > 0.15 while maintaining detection performance",
+      "description": "Convert annotations to YOLO format with all 357 categories. Train YOLOv8l/x with all classes. Evaluate both detection_mAP@0.5 (ignoring class) and classification_mAP@0.5 (with correct class). Compare final_score with detection-only approach.",
+      "success_criteria": "final_score > detection-only baseline from step 4",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 6,
+      "type": "experiment",
+      "title": "Two-stage approach: Detection + Crop Classification",
+      "hypothesis": "Using detection model from step 4 + a separate classifier on crops outperforms end-to-end multi-class detection",
+      "description": "Use the best detection model to extract product crops from training images. Train a classification model (e.g., ResNet50 or EfficientNet via timm) on these crops to predict category_id. Include product reference images as additional training data for the classifier. At inference: detect with single-class model, crop, classify each crop. Evaluate final_score.",
+      "success_criteria": "final_score improvement over step 5",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 7,
+      "type": "experiment",
+      "title": "Leverage product reference images for classification",
+      "hypothesis": "Using DINOv2/CLIP embeddings to match detected crops against reference product images improves classification accuracy, especially for rare classes",
+      "description": "Extract embeddings from all product reference images using a pretrained vision model (DINOv2 via timm or similar). At inference: detect products, crop, extract embedding, find nearest reference product by cosine similarity. Evaluate classification accuracy and final_score. This is a zero-shot/few-shot approach that doesn't require training a classifier.",
+      "success_criteria": "Classification accuracy on rare classes (< 5 training examples) > 20%",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 8,
+      "type": "experiment",
+      "title": "Hybrid classification: trained classifier + embedding retrieval",
+      "hypothesis": "Combining a trained classifier (for common classes) with embedding-based retrieval (for rare classes) gives the best classification performance",
+      "description": "For classes with sufficient training data (e.g., >10 annotations), use the trained classifier from step 6. For rare classes, use embedding-based retrieval from step 7. Implement a fusion strategy (e.g., weighted combination of classifier logits and retrieval similarity scores). Evaluate final_score.",
+      "success_criteria": "final_score improvement over both step 6 and step 7 individually",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 9,
+      "type": "experiment",
+      "title": "Detection model ensemble with WBF",
+      "hypothesis": "Ensembling multiple detection models with Weighted Boxes Fusion improves detection mAP by 2-5%",
+      "description": "Train 2-3 detection models with different configurations (e.g., YOLOv8x at 1280, YOLOv8l at 1600, RT-DETR). At inference, run all models and combine predictions using ensemble_boxes WBF. Evaluate detection_mAP@0.5 improvement. Must fit within 300s inference budget.",
+      "success_criteria": "detection_mAP@0.5 improvement of at least 2% over best single model",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 10,
+      "type": "experiment",
+      "title": "Train with augmented data: paste product reference images onto shelves",
+      "hypothesis": "Synthetic data augmentation by pasting reference product images onto shelf backgrounds improves both detection and classification",
+      "description": "Create synthetic training images by pasting product reference images (from data/products/) onto shelf backgrounds extracted from training images. Use this to augment training data, especially for rare classes. Retrain the best model configuration.",
+      "success_criteria": "Improvement in classification_mAP for rare classes (< 5 annotations)",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 11,
+      "type": "experiment",
+      "title": "Optimize confidence thresholds and NMS parameters",
+      "hypothesis": "Tuning confidence threshold and NMS IoU threshold on validation set improves final_score by 1-3%",
+      "description": "Sweep confidence thresholds (0.01 to 0.5) and NMS IoU thresholds (0.3 to 0.8) on the validation set. Also tune max_det parameter. Find optimal combination for final_score metric.",
+      "success_criteria": "final_score improvement of at least 1% over default thresholds",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 12,
+      "type": "experiment",
+      "title": "Test-time augmentation (TTA) for detection",
+      "hypothesis": "TTA (multi-scale, horizontal flip) improves detection mAP within the 300s budget",
+      "description": "Implement TTA with horizontal flip and multi-scale inference. Combine predictions with WBF. Profile inference time to ensure it fits within 300s for all test images.",
+      "success_criteria": "detection_mAP improvement while staying under 300s total inference time",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 13,
+      "type": "refactor",
+      "title": "Optimize inference pipeline for 300s budget",
+      "hypothesis": null,
+      "description": "Profile the full inference pipeline (detection + classification) on the full training set to estimate test-time performance. Optimize batch sizes, use FP16 inference, ONNX export if beneficial. Ensure the complete pipeline (load model, process all images, save predictions) runs within 300s on L4 GPU.",
+      "success_criteria": "Full pipeline runs on 248 images in under 250s (leaving margin)",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 14,
+      "type": "experiment",
+      "title": "RT-DETR as alternative detection backbone",
+      "hypothesis": "RT-DETR (transformer-based detector) may handle dense scenes better than YOLOv8",
+      "description": "Train RT-DETR-l from ultralytics on the same data. RT-DETR uses attention mechanisms that may better handle the dense, repeated product layout. Compare detection_mAP with YOLOv8 results.",
+      "success_criteria": "Competitive or better detection_mAP compared to best YOLOv8 model",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 15,
+      "type": "experiment",
+      "title": "Self-training / pseudo-labeling on test images",
+      "hypothesis": "Using high-confidence predictions on test images as pseudo-labels for fine-tuning improves classification",
+      "description": "Run the best model on test images, take high-confidence predictions as pseudo-labels, fine-tune the classification head on these pseudo-labels combined with original training data. This leverages test-time distribution. Must be done within the 300s inference budget.",
+      "success_criteria": "final_score improvement over non-self-trained model",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 16,
+      "type": "experiment",
+      "title": "Final ensemble and submission optimization",
+      "hypothesis": "Combining the best detection ensemble with the best classification approach maximizes final_score",
+      "description": "Combine the best detection approach (ensemble or single model) with the best classification approach (hybrid classifier + retrieval). Optimize all thresholds jointly on validation set. Ensure model weights fit within 420MB limit and inference within 300s. Create final main.py submission.",
+      "success_criteria": "Highest final_score achieved across all experiments",
+      "status": "pending",
+      "experiment_id": null
+    }
+  ]
+}
