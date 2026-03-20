@@ -4,9 +4,30 @@ from pathlib import Path
 from collections import Counter, defaultdict
 from utils import evaluate_predictions, convert_coco_to_yolo
 
-def train_yolov8x_baseline():
-    """Train YOLOv8x baseline with nc=356 at imgsz=1280"""
-    print("=== Training YOLOv8x Baseline ===")
+def create_single_class_annotations(input_json_path: Path, output_json_path: Path):
+    """Convert multi-class COCO annotations to single-class (all category_id=1)"""
+    print(f"Converting {input_json_path} to single-class format...")
+    
+    with open(input_json_path, 'r') as f:
+        data = json.load(f)
+    
+    # Convert all annotations to category_id=1
+    for ann in data['annotations']:
+        ann['category_id'] = 1
+    
+    # Update categories to single class
+    data['categories'] = [{'id': 1, 'name': 'product'}]
+    
+    # Save converted annotations
+    with open(output_json_path, 'w') as f:
+        json.dump(data, f)
+    
+    print(f"Converted {len(data['annotations'])} annotations to single class")
+    return True
+
+def train_yolov8x_single_class():
+    """Train YOLOv8x with nc=1 (detection only) at imgsz=1280"""
+    print("=== Training YOLOv8x Single Class (nc=1) ===")
     
     try:
         from ultralytics import YOLO
@@ -15,34 +36,55 @@ def train_yolov8x_baseline():
         print(f"❌ Required packages not available: {e}")
         return None, None, None
     
-    # Check if YOLO dataset exists
-    data_yaml_path = Path("data/data.yaml")
-    if not data_yaml_path.exists():
-        print("❌ YOLO dataset not found. Creating...")
-        # Ensure splits exist and convert to YOLO format
-        if not Path("data/train_split.json").exists():
-            print("❌ Train split not found")
-            return None, None, None
-        
+    # Create single-class versions of train/val splits
+    train_single_path = Path("data/train_split_single.json")
+    val_single_path = Path("data/val_split_single.json")
+    
+    if not train_single_path.exists():
+        create_single_class_annotations(Path("data/train_split.json"), train_single_path)
+    
+    if not val_single_path.exists():
+        create_single_class_annotations(Path("data/val_split.json"), val_single_path)
+    
+    # Convert to YOLO format with single class
+    yolo_train_single_dir = Path("data/yolo_train_single")
+    yolo_val_single_dir = Path("data/yolo_val_single")
+    
+    if not yolo_train_single_dir.exists():
         train_success = convert_coco_to_yolo(
-            coco_json_path=Path("data/train_split.json"),
+            coco_json_path=train_single_path,
             images_dir=Path("data/train/images"),
-            output_dir=Path("data/yolo_train"),
-            split_name="train"
+            output_dir=yolo_train_single_dir,
+            split_name="train_single"
         )
-        
-        val_success = convert_coco_to_yolo(
-            coco_json_path=Path("data/val_split.json"),
-            images_dir=Path("data/train/images"),
-            output_dir=Path("data/yolo_val"),
-            split_name="val"
-        )
-        
-        if not (train_success and val_success):
-            print("❌ Failed to create YOLO dataset")
+        if not train_success:
+            print("❌ Failed to create single-class train dataset")
             return None, None, None
     
-    print(f"✓ Using YOLO dataset at {data_yaml_path}")
+    if not yolo_val_single_dir.exists():
+        val_success = convert_coco_to_yolo(
+            coco_json_path=val_single_path,
+            images_dir=Path("data/train/images"),
+            output_dir=yolo_val_single_dir,
+            split_name="val_single"
+        )
+        if not val_success:
+            print("❌ Failed to create single-class val dataset")
+            return None, None, None
+    
+    # Create data.yaml for single class
+    data_yaml_single_path = Path("data/data_single.yaml")
+    if not data_yaml_single_path.exists():
+        with open(data_yaml_single_path, 'w') as f:
+            f.write(f"path: {Path('data').absolute()}\n")
+            f.write("train: yolo_train_single\n")
+            f.write("val: yolo_val_single\n")
+            f.write("nc: 1\n")
+            f.write("names:\n")
+            f.write("  0: product\n")
+        print(f"Created single-class data.yaml")
+    
+    print(f"✓ Using single-class YOLO dataset at {data_yaml_single_path}")
     
     # Initialize YOLOv8x model
     print("Initializing YOLOv8x model...")
@@ -56,15 +98,15 @@ def train_yolov8x_baseline():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     
-    # Training parameters
+    # Training parameters for single class
     train_params = {
-        'data': str(data_yaml_path),
+        'data': str(data_yaml_single_path),
         'epochs': 150,
         'imgsz': 1280,
         'batch': -1,  # Auto batch size
         'device': device,
         'project': 'runs/detect',
-        'name': 'yolov8x_baseline',
+        'name': 'yolov8x_single_class',
         'save': True,
         'save_period': 25,  # Save checkpoint every 25 epochs
         'patience': 30,  # Early stopping patience
@@ -109,22 +151,22 @@ def train_yolov8x_baseline():
         traceback.print_exc()
         return None, None, None
 
-def evaluate_yolo_model(model_path: Path):
-    """Evaluate trained YOLO model on validation split"""
-    print(f"\n=== Evaluating Model: {model_path} ===")
+def evaluate_single_class_model(model_path: Path):
+    """Evaluate single-class YOLO model on validation split (detection mAP only)"""
+    print(f"\n=== Evaluating Single-Class Model: {model_path} ===")
     
     try:
         from ultralytics import YOLO
         import torch
     except ImportError as e:
         print(f"❌ Required packages not available: {e}")
-        return None, None, None
+        return None, None
     
-    # Load validation split
+    # Load validation split (original multi-class for evaluation)
     val_split_path = Path("data/val_split.json")
     if not val_split_path.exists():
         print(f"❌ Validation split not found at {val_split_path}")
-        return None, None, None
+        return None, None
     
     with open(val_split_path, 'r') as f:
         val_split = json.load(f)
@@ -135,12 +177,12 @@ def evaluate_yolo_model(model_path: Path):
     model = YOLO(str(model_path))
     
     # Run inference on validation images
-    val_images_dir = Path("data/yolo_val")
+    val_images_dir = Path("data/yolo_val_single")
     val_image_files = list(val_images_dir.glob("*.jpg"))
     
     if not val_image_files:
         print(f"❌ No validation images found in {val_images_dir}")
-        return None, None, None
+        return None, None
     
     print(f"Running inference on {len(val_image_files)} validation images...")
     
@@ -170,7 +212,7 @@ def evaluate_yolo_model(model_path: Path):
         # Run inference
         results = model(str(img_path), verbose=False)
         
-        # Extract predictions
+        # Extract predictions (all will be category_id=0 since it's single class)
         for result in results:
             if result.boxes is not None:
                 boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
@@ -182,9 +224,10 @@ def evaluate_yolo_model(model_path: Path):
                     x1, y1, x2, y2 = box
                     x, y, w, h = x1, y1, x2 - x1, y2 - y1
                     
+                    # For single-class model, all predictions are category_id=0
                     predictions.append({
                         'image_id': image_id,
-                        'category_id': int(cls),
+                        'category_id': 0,  # Single class
                         'bbox': [float(x), float(y), float(w), float(h)],
                         'score': float(score)
                     })
@@ -193,24 +236,68 @@ def evaluate_yolo_model(model_path: Path):
     
     if not predictions:
         print("❌ No predictions generated")
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0
     
-    # Evaluate using our custom evaluation function
+    # For single-class evaluation, we only care about detection mAP
+    # Convert ground truth to single class for fair comparison
+    det_gt = val_split.copy()
+    det_gt['categories'] = [{'id': 0, 'name': 'product'}]
+    det_gt['annotations'] = []
+    for ann in val_split['annotations']:
+        det_ann = ann.copy()
+        det_ann['category_id'] = 0  # Convert to single class
+        det_gt['annotations'].append(det_ann)
+    
+    # Evaluate using detection-only evaluation
     try:
-        val_score, det_map, cls_map = evaluate_predictions(predictions, val_split)
+        from pycocotools.coco import COCO
+        from pycocotools.cocoeval import COCOeval
+        import tempfile
+        import os
         
-        print(f"\n=== Evaluation Results ===")
-        print(f"Detection mAP@0.5: {det_map:.4f}")
-        print(f"Classification mAP@0.5: {cls_map:.4f}")
-        print(f"Combined val_score: {val_score:.4f}")
+        # Create temporary files for COCO evaluation
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as gt_file:
+            json.dump(det_gt, gt_file)
+            gt_path = gt_file.name
         
-        return val_score, det_map, cls_map
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as pred_file:
+            json.dump(predictions, pred_file)
+            pred_path = pred_file.name
+        
+        try:
+            # Load ground truth and predictions
+            coco_gt = COCO(gt_path)
+            coco_dt = coco_gt.loadRes(pred_path)
+            
+            # Evaluate detection
+            coco_eval = COCOeval(coco_gt, coco_dt, 'bbox')
+            coco_eval.params.iouThrs = [0.5]  # Only IoU@0.5
+            coco_eval.evaluate()
+            coco_eval.accumulate()
+            coco_eval.summarize()
+            
+            detection_map = coco_eval.stats[0]  # mAP@0.5
+            
+            print(f"\n=== Single-Class Detection Results ===")
+            print(f"Detection mAP@0.5: {detection_map:.4f}")
+            print(f"Classification mAP@0.5: 0.0000 (single class)")
+            print(f"Combined val_score: {0.7 * detection_map:.4f} (detection only)")
+            
+            return detection_map, 0.7 * detection_map
+            
+        finally:
+            # Clean up temporary files
+            for temp_path in [gt_path, pred_path]:
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
         
     except Exception as e:
         print(f"❌ Evaluation failed: {e}")
         import traceback
         traceback.print_exc()
-        return None, None, None
+        return None, None
 
 def create_train_val_splits():
     """Create 90/10 train/val splits stratified by image with seed=42"""
@@ -288,8 +375,8 @@ def create_train_val_splits():
     return True
 
 def main():
-    """Main experiment: Train YOLOv8x baseline"""
-    print("=== Step 6: YOLOv8x Baseline Training ===")
+    """Main experiment: Train YOLOv8x with nc=1 (detection only)"""
+    print("=== Step 7: YOLOv8x Single Class (nc=1) Training ===")
     
     # Ensure splits exist
     if not Path("data/train_split.json").exists():
@@ -299,8 +386,8 @@ def main():
             print("❌ Failed to create splits")
             return
     
-    # Train YOLOv8x baseline
-    results, best_model_path, model = train_yolov8x_baseline()
+    # Train YOLOv8x with single class
+    results, best_model_path, model = train_yolov8x_single_class()
     
     if results is None:
         print("❌ Training failed")
@@ -312,13 +399,15 @@ def main():
     
     # Evaluate the trained model
     if best_model_path and best_model_path.exists():
-        val_score, det_map, cls_map = evaluate_yolo_model(best_model_path)
+        detection_map, val_score = evaluate_single_class_model(best_model_path)
         
-        if val_score is not None:
+        if detection_map is not None:
             print(f"\n=== Final Results ===")
+            print(f"METRIC:detection_map={detection_map:.4f}")
+            print(f"METRIC:classification_map=0.0000")
             print(f"METRIC:val_score={val_score:.4f}")
-            print(f"METRIC:detection_map={det_map:.4f}")
-            print(f"METRIC:classification_map={cls_map:.4f}")
+            print(f"METRIC:model_type=single_class")
+            print(f"METRIC:num_classes=1")
             print(f"METRIC:model_size=yolov8x")
             print(f"METRIC:image_size=1280")
             print(f"METRIC:epochs=150")
@@ -330,7 +419,8 @@ def main():
                 if 'metrics/mAP50(B)' in train_metrics:
                     print(f"METRIC:train_map50={train_metrics['metrics/mAP50(B)']:.4f}")
             
-            print(f"\n🎉 YOLOv8x baseline complete! val_score = {val_score:.4f}")
+            print(f"\n🎉 YOLOv8x single-class complete! Detection mAP@0.5 = {detection_map:.4f}")
+            print(f"This is the detection component for two-stage approach.")
         else:
             print("❌ Evaluation failed")
             print("METRIC:evaluation_success=0")

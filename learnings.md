@@ -48,3 +48,11 @@
 - Result: Training failed due to missing ultralytics package dependency
 - Side effects: None (training never started)
 - Takeaway: The ultralytics package needs to be installed before any YOLO training can proceed.
+
+## Experiment 7 — YOLOv8x with nc=1 (detection only) at imgsz=1280
+- Status: FAILED
+- Hypothesis: Single-class detector achieves higher recall since it only needs to find products, not classify them
+- Change: Modified main.py to train YOLOv8x with nc=1 and convert annotations to single-class format
+- Result: Training failed due to missing ultralytics package dependency
+- Side effects: None (experiment didn't run)
+- Takeaway: The ultralytics package needs to be installed before any YOLO experiments can proceed.
