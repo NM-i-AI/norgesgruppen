@@ -112,26 +112,45 @@ names: {class_names}
     
     return train_image_ids, val_image_ids, categories
 
-def train_yolo_model(dataset_yaml_path, epochs=80, imgsz=1280):
-    """Train YOLOv8m model for multi-class detection"""
-    model = YOLO('yolov8m.pt')  # Load pretrained YOLOv8m model
+def train_yolo_model(dataset_yaml_path, epochs=100, imgsz=1280):
+    """Train YOLOv8l model for multi-class detection with enhanced augmentations"""
+    model = YOLO('yolov8l.pt')  # Load pretrained YOLOv8l model
     
-    # Train the model
+    # Train the model with enhanced augmentations and cosine LR schedule
     results = model.train(
         data=dataset_yaml_path,
         epochs=epochs,
         imgsz=imgsz,
-        batch=6,  # Reduced batch size for multi-class at 1280px
+        batch=4,  # Reduced batch size for YOLOv8l at 1280px
         device=0,  # Use GPU
         project='runs/detect',
-        name='yolov8m_multiclass',
+        name='yolov8l_multiclass_augmented',
         save=True,
         verbose=True,
-        # Training hyperparameters
+        # Enhanced training hyperparameters
         lr0=0.01,        # Initial learning rate
+        lrf=0.01,        # Final learning rate (for cosine schedule)
         weight_decay=0.0005,
         warmup_epochs=3,
-        patience=25      # Early stopping patience
+        patience=30,     # Early stopping patience
+        # Enhanced augmentations
+        copy_paste=0.3,  # Copy-paste augmentation probability
+        mosaic=1.0,      # Mosaic augmentation probability
+        mixup=0.1,       # MixUp augmentation probability
+        # Additional augmentations
+        hsv_h=0.015,     # HSV-Hue augmentation
+        hsv_s=0.7,       # HSV-Saturation augmentation
+        hsv_v=0.4,       # HSV-Value augmentation
+        degrees=0.0,     # Rotation degrees
+        translate=0.1,   # Translation fraction
+        scale=0.5,       # Scaling factor
+        shear=0.0,       # Shear degrees
+        perspective=0.0, # Perspective transformation
+        flipud=0.0,      # Vertical flip probability
+        fliplr=0.5,      # Horizontal flip probability
+        # Optimizer settings for cosine schedule
+        optimizer='AdamW',
+        cos_lr=True      # Use cosine learning rate schedule
     )
     
     return model, results
@@ -301,7 +320,7 @@ def evaluate_classification_map(gt_ann_file, pred_file, val_image_ids, categorie
         pathlib.Path(cls_pred_file).unlink(missing_ok=True)
 
 def main():
-    print("=== YOLOv8m Multi-Class Detection Experiment ===")
+    print("=== YOLOv8l Multi-Class Detection with Enhanced Augmentations ===")
     
     # Set random seed for reproducibility
     random.seed(42)
@@ -317,14 +336,14 @@ def main():
         coco_ann_file, images_dir, yolo_dataset_dir, train_ratio=0.8
     )
     
-    # Step 2: Train YOLOv8m model
-    print("\n2. Training YOLOv8m model...")
+    # Step 2: Train YOLOv8l model with enhanced augmentations
+    print("\n2. Training YOLOv8l model with enhanced augmentations...")
     dataset_yaml_path = f"{yolo_dataset_dir}/dataset.yaml"
-    model, results = train_yolo_model(dataset_yaml_path, epochs=80, imgsz=1280)
+    model, results = train_yolo_model(dataset_yaml_path, epochs=100, imgsz=1280)
     
     # Step 3: Load best model for inference
     print("\n3. Loading best trained model...")
-    best_model_path = 'runs/detect/yolov8m_multiclass/weights/best.pt'
+    best_model_path = 'runs/detect/yolov8l_multiclass_augmented/weights/best.pt'
     model = YOLO(best_model_path)
     
     # Step 4: Generate predictions on validation set
@@ -367,8 +386,15 @@ def main():
     print(f"METRIC:train_images={len(train_image_ids)}")
     print(f"METRIC:val_images={len(val_image_ids)}")
     print(f"METRIC:num_classes={len(categories)}")
+    print(f"METRIC:model_size=yolov8l")
+    print(f"METRIC:epochs=100")
+    print(f"METRIC:batch_size=4")
+    print(f"METRIC:copy_paste=0.3")
+    print(f"METRIC:mosaic=1.0")
+    print(f"METRIC:mixup=0.1")
+    print(f"METRIC:cosine_lr=True")
     
-    print("\n=== Multi-Class Detection Experiment Complete ===")
+    print("\n=== YOLOv8l Multi-Class Detection with Enhanced Augmentations Complete ===")
     print(f"Detection mAP@0.5: {detection_map_50:.4f}")
     print(f"Classification mAP@0.5: {classification_map_50:.4f}")
     print(f"Final Score (70% detection + 30% classification): {final_score:.4f}")

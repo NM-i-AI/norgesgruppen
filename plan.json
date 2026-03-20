@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-11-51",
   "created_at": "2026-03-20T11:51:33.547028+00:00",
   "revision": 1,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "Training with all 356 categories enables both detection and classification scoring, achieving final_score > 0.50 (0.7*det + 0.3*cls)",
       "description": "Modify the baseline to train with all 356 categories instead of single-class. Use YOLOv8m at 1280px for 80 epochs. The YOLO model will learn both localization and classification jointly. Evaluate both detection mAP@0.5 (category-agnostic) and classification mAP@0.5 (category-aware). Compare final_score against single-class baseline.",
       "success_criteria": "final_score > 0.45, classification_mAP@0.5 > 0.10",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,

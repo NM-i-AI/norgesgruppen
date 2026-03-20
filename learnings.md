@@ -23,3 +23,11 @@
 - Result: Import error - missing pycocotools dependency
 - Side effects: None (failed before execution)
 - Takeaway: The pycocotools library needs to be installed before running multi-class experiments that use COCO evaluation functions.
+
+## Experiment 4 — Scale up to YOLOv8l with augmentation tuning
+- Status: FAILED
+- Hypothesis: YOLOv8l with copy-paste augmentation and tuned hyperparameters improves both detection and classification over YOLOv8m
+- Change: Upgraded to YOLOv8l, added copy-paste/mosaic/mixup augmentations, cosine LR schedule with AdamW, 100 epochs, batch size 4
+- Result: ModuleNotFoundError: No module named 'pycocotools' - experiment failed to start
+- Side effects: None observed due to immediate failure
+- Takeaway: Missing pycocotools dependency must be installed before running any YOLO experiments.
