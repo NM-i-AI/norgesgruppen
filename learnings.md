@@ -40,3 +40,11 @@
 - Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading YOLOv8x pretrained weights
 - Side effects: None observed (training never started)
 - Takeaway: Need to handle PyTorch 2.6's new weights_only=True default by either setting weights_only=False or using torch.serialization.safe_globals() context manager when loading YOLO pretrained weights.
+
+## Experiment 6 — Fix PyTorch 2.6 weights_only issue and train YOLOv8m nc=356 baseline
+- Status: FAILED
+- Hypothesis: Monkey-patching torch.load to set weights_only=False will allow YOLO pretrained weights to load, enabling training
+- Change: Added torch.load monkey-patch and switched to YOLOv8m nc=356 multi-class training
+- Result: Training failed due to NumPy compatibility issue - `np.trapz` was deprecated and removed in newer NumPy versions
+- Side effects: Model loaded successfully (26M parameters), pretrained weights transferred (469/475 items), but crashed during validation
+- Takeaway: The torch.load fix worked, but there's a NumPy version incompatibility in ultralytics that needs to be resolved before training can proceed.

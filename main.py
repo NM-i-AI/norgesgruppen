@@ -1,3 +1,11 @@
+# Monkey-patch torch.load to fix PyTorch 2.6 weights_only issue
+import torch
+_original_torch_load = torch.load
+def _patched_torch_load(*args, **kwargs):
+    kwargs.setdefault('weights_only', False)
+    return _original_torch_load(*args, **kwargs)
+torch.load = _patched_torch_load
+
 import json
 import numpy as np
 from pathlib import Path
@@ -9,7 +17,6 @@ from pycocotools.cocoeval import COCOeval
 import tempfile
 import os
 from ultralytics import YOLO
-import torch
 
 def create_train_val_split(seed=42):
     """Create 90/10 train/val split at image level with seed=42"""
@@ -295,7 +302,7 @@ def evaluate_predictions(gt_json_path, predictions, iou_threshold=0.5):
         print(f"Error during evaluation: {e}")
         return 0.0, 0.0, 0.0
 
-def copy_images_to_yolo_dirs(dataset_name='yolo_sc'):
+def copy_images_to_yolo_dirs(dataset_name='yolo_mc'):
     """Copy images from data/train/images to YOLO train/val directories"""
     print("Copying images to YOLO directories...")
     
@@ -325,7 +332,7 @@ def copy_images_to_yolo_dirs(dataset_name='yolo_sc'):
     
     print(f"Copied {len(train_split['images'])} train images and {len(val_split['images'])} val images")
 
-def train_yolo_model(model_size='x', nc=1, imgsz=1280, epochs=200, batch=8, close_mosaic=50, dataset_name='yolo_sc'):
+def train_yolo_model(model_size='m', nc=356, imgsz=1280, epochs=100, batch=8, close_mosaic=50, dataset_name='yolo_mc'):
     """Train YOLO model"""
     print(f"Training YOLOv8{model_size} with nc={nc}, imgsz={imgsz}, epochs={epochs}...")
     
@@ -350,7 +357,7 @@ def train_yolo_model(model_size='x', nc=1, imgsz=1280, epochs=200, batch=8, clos
     print(f"Training completed. Best weights: {model.trainer.best}")
     return model, results
 
-def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1, dataset_name='yolo_sc'):
+def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1, dataset_name='yolo_mc'):
     """Run inference on validation set and evaluate"""
     print(f"Running inference with {model_path}...")
     
@@ -408,8 +415,8 @@ def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1,
     return val_score, det_map, cls_map, predictions
 
 def main():
-    """Main training and evaluation pipeline for YOLOv8x nc=1"""
-    print("=== YOLOv8x SINGLE-CLASS DETECTION TRAINING ===")
+    """Main training and evaluation pipeline for YOLOv8m nc=356"""
+    print("=== YOLOv8m MULTI-CLASS DETECTION TRAINING ===")
     
     try:
         # Check if splits exist, create if not
@@ -417,30 +424,30 @@ def main():
             print("Creating train/val split...")
             create_train_val_split(seed=42)
         
-        # Check if YOLO single-class data exists, create if not
-        dataset_name = 'yolo_sc'  # single-class
+        # Check if YOLO multi-class data exists, create if not
+        dataset_name = 'yolo_mc'  # multi-class
         if not Path(f'data/{dataset_name}/dataset.yaml').exists():
-            print("Converting to YOLO single-class format...")
+            print("Converting to YOLO multi-class format...")
             with open('data/splits/train_split.json', 'r') as f:
                 train_split = json.load(f)
             with open('data/splits/val_split.json', 'r') as f:
                 val_split = json.load(f)
             
-            # Convert with nc=1 for single-class detection
-            convert_coco_to_yolo(train_split, f'data/{dataset_name}/train', nc=1)
-            convert_coco_to_yolo(val_split, f'data/{dataset_name}/val', nc=1)
-            create_yolo_dataset_yaml(f'data/{dataset_name}/train', f'data/{dataset_name}/val', nc=1, output_path=f'data/{dataset_name}/dataset.yaml')
+            # Convert with nc=356 for multi-class detection
+            convert_coco_to_yolo(train_split, f'data/{dataset_name}/train', nc=356)
+            convert_coco_to_yolo(val_split, f'data/{dataset_name}/val', nc=356)
+            create_yolo_dataset_yaml(f'data/{dataset_name}/train', f'data/{dataset_name}/val', nc=356, output_path=f'data/{dataset_name}/dataset.yaml')
         
         # Copy images to YOLO directories
         copy_images_to_yolo_dirs(dataset_name)
         
-        # Train YOLOv8x single-class
-        print("\n=== TRAINING YOLOv8x nc=1 ====")
+        # Train YOLOv8m multi-class
+        print("\n=== TRAINING YOLOv8m nc=356 ====")
         model, results = train_yolo_model(
-            model_size='x',
-            nc=1,
+            model_size='m',
+            nc=356,
             imgsz=1280,
-            epochs=200,
+            epochs=100,
             batch=8,
             close_mosaic=50,
             dataset_name=dataset_name
@@ -463,7 +470,7 @@ def main():
         # Print final results
         print("\n=== FINAL RESULTS ====")
         print(f"Detection mAP@0.5: {det_map:.4f}")
-        print(f"Classification mAP@0.5: {cls_map:.4f} (expected 0.0 for nc=1 model)")
+        print(f"Classification mAP@0.5: {cls_map:.4f}")
         print(f"Val Score: {val_score:.4f}")
         
         # Output metrics for orchestrator
@@ -472,7 +479,7 @@ def main():
         print(f"METRIC:classification_map={cls_map:.4f}")
         print(f"METRIC:num_predictions={len(predictions)}")
         print(f"METRIC:model_path={best_model_path}")
-        print(f"METRIC:model_type=yolov8x_nc1")
+        print(f"METRIC:model_type=yolov8m_nc356")
         
     except Exception as e:
         print(f"Error in training pipeline: {e}")
