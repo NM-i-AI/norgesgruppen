@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-11-46",
   "created_at": "2026-03-20T11:46:42.708587+00:00",
   "revision": 1,
-  "current_step": 2,
+  "current_step": 3,
   "plan": [
     {
       "step": 1,
@@ -21,8 +21,8 @@
       "hypothesis": "A YOLOv8m model trained for detection-only (single class) on ~200 training images at 1280px resolution can achieve detection_mAP@0.5 > 0.4, establishing a working baseline pipeline",
       "description": "Convert COCO annotations to YOLO format with single class. Split data ~80/20 train/val. Train YOLOv8m at imgsz=1280 for 100 epochs with default augmentations. Build full inference pipeline that outputs predictions.json in required COCO format. Evaluate detection mAP@0.5. This establishes the end-to-end pipeline.",
       "success_criteria": "Working end-to-end pipeline with detection_mAP@0.5 > 0.3 on validation set",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-002"
     },
     {
       "step": 3,
