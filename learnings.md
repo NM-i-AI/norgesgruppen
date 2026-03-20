@@ -24,3 +24,11 @@
 - Result: packages_installed=0.0, gpu_available=1.0, setup_success=0.0 (torch/torchvision installation failed due to incorrect pip syntax)
 - Side effects: Some packages (ultralytics, timm, pycocotools, ensemble-boxes) installed successfully; existing torch 2.10.0+cu128 already available
 - Takeaway: The pip install command syntax was incorrect for specifying index URLs - need to use separate --index-url flag, not inline with package specification.
+
+## Experiment 4 — Create train/val split, evaluation function, and YOLO dataset
+- Status: FAILED
+- Hypothesis: None (refactor experiment)
+- Change: Implemented train/val split (224/24), evaluation function with COCOeval, and YOLO format conversion with dataset YAML configs
+- Result: ValueError when creating YOLO dataset YAML - path resolution issue with relative_to() method
+- Side effects: Successfully created train/val splits and converted annotations to YOLO format before failure
+- Takeaway: The YOLO dataset YAML creation failed due to incorrect path handling; need to fix relative path calculation or use absolute paths instead.

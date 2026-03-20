@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-22-31",
   "created_at": "2026-03-20T22:31:40.610746+00:00",
   "revision": 2,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "Installing torch with CUDA support will reveal GPU availability; all required packages can be installed",
       "description": "Run pip install for ultralytics==8.1.0, torch==2.6.0+cu124, torchvision==0.21.0+cu124, timm==0.9.12, pycocotools, ensemble-boxes. Then verify torch.cuda.is_available() and print GPU info. This is critical before any training.",
       "success_criteria": "All packages installed successfully, GPU status confirmed",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,
