@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
   "revision": 1,
-  "current_step": 2,
+  "current_step": 3,
   "plan": [
     {
       "step": 1,
@@ -21,8 +21,8 @@
       "hypothesis": "A YOLOv8m model trained for single-class detection at image size 1280 can achieve detection_mAP@0.5 > 0.5, giving final_score > 0.35 (since classification will be random/zero)",
       "description": "Convert COCO annotations to YOLO format with a single class (product). Create 90/10 train/val split. Train YOLOv8m at imgsz=1280 for 30 epochs with high max_det (300). Evaluate detection mAP@0.5 on val set. For submission, predict all boxes as category_id=0. This establishes our detection baseline.",
       "success_criteria": "detection_mAP@0.5 > 0.4 on validation set",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-002"
     },
     {
       "step": 3,
