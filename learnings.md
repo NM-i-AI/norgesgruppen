@@ -64,3 +64,11 @@
 - Result: Training failed with "operator torchvision::nms does not exist" error, val_score=0.0
 - Side effects: Package installation issues with torch/torchvision uninstall conflicts
 - Takeaway: The torchvision NMS operator error suggests a compatibility issue between installed PyTorch/torchvision versions and YOLO requirements that must be resolved before testing larger models.
+
+## Experiment 5 — Diagnose torch/torchvision environment and fix NMS operator
+- Status: FAILED
+- Hypothesis: The NMS operator error is caused by version mismatch between pre-installed torch and torchvision
+- Change: Created diagnosis script to check torch/torchvision versions and reinstall compatible versions (torch==2.6.0, torchvision==0.21.0)
+- Result: Installation failed due to pip being unable to uninstall pre-installed torch (no RECORD file), same NMS operator error persists
+- Side effects: None - installation never completed
+- Takeaway: The pre-installed torch cannot be uninstalled normally; need to use --force-reinstall --no-deps as suggested in the error message.
