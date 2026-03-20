@@ -7,12 +7,95 @@ import random
 import shutil
 from statistics import mean
 
+def force_reinstall_torchvision():
+    """Force reinstall torchvision to fix NMS operator"""
+    print("=== FORCE REINSTALLING TORCHVISION ===")
+    
+    # Try force reinstall with --no-deps first
+    try:
+        print("Attempting: pip install torchvision==0.21.0 --force-reinstall --no-deps")
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'torchvision==0.21.0', '--force-reinstall', '--no-deps'],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode == 0:
+            print("✓ torchvision==0.21.0 force reinstall successful")
+            return True
+        else:
+            print(f"✗ torchvision==0.21.0 force reinstall failed: {result.stderr}")
+    except Exception as e:
+        print(f"✗ torchvision==0.21.0 force reinstall error: {e}")
+    
+    # Try without version pinning if that fails
+    try:
+        print("Attempting: pip install torchvision --force-reinstall --no-deps")
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'torchvision', '--force-reinstall', '--no-deps'],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode == 0:
+            print("✓ torchvision (latest) force reinstall successful")
+            return True
+        else:
+            print(f"✗ torchvision (latest) force reinstall failed: {result.stderr}")
+    except Exception as e:
+        print(f"✗ torchvision (latest) force reinstall error: {e}")
+    
+    return False
+
+def test_nms_operator():
+    """Test if torchvision.ops.nms works"""
+    try:
+        import torch
+        import torchvision.ops
+        
+        # Create dummy data for NMS test
+        boxes = torch.tensor([[0, 0, 10, 10], [5, 5, 15, 15], [20, 20, 30, 30]], dtype=torch.float32)
+        scores = torch.tensor([0.9, 0.8, 0.7], dtype=torch.float32)
+        
+        # Test NMS
+        keep = torchvision.ops.nms(boxes, scores, iou_threshold=0.5)
+        print(f"✓ torchvision.ops.nms works: kept indices {keep}")
+        return True
+        
+    except Exception as e:
+        print(f"✗ torchvision.ops.nms failed: {e}")
+        return False
+
+def test_torch_extensions():
+    """Test if torch C extensions are loadable"""
+    try:
+        import torch
+        print(f"torch version: {torch.__version__}")
+        print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
+        
+        # Try to access some C++ extensions
+        try:
+            import torchvision
+            print(f"torchvision version: {torchvision.__version__}")
+            
+            # Test if torchvision C extensions load
+            import torchvision.ops
+            print("✓ torchvision.ops module imported successfully")
+            
+            # List available ops
+            ops_attrs = [attr for attr in dir(torchvision.ops) if not attr.startswith('_')]
+            print(f"Available ops: {ops_attrs[:10]}...")  # Show first 10
+            
+            return True
+            
+        except Exception as e:
+            print(f"✗ torchvision C extensions failed: {e}")
+            return False
+            
+    except Exception as e:
+        print(f"✗ torch import failed: {e}")
+        return False
+
 def install_packages():
     """Install required packages"""
     packages = [
         "ultralytics==8.1.0",
-        "torch==2.6.0", 
-        "torchvision==0.21.0",
         "timm==0.9.12"
     ]
     
@@ -178,8 +261,8 @@ names:
     
     return yaml_path
 
-def train_yolo_model(dataset_yaml_path, model_size='n', epochs=50, imgsz=640, batch=16):
-    """Train YOLO model"""
+def train_yolo_model(dataset_yaml_path, model_size='n', epochs=5, imgsz=640, batch=16):
+    """Train YOLO model (smoke test with 5 epochs)"""
     try:
         from ultralytics import YOLO
         
@@ -194,7 +277,7 @@ def train_yolo_model(dataset_yaml_path, model_size='n', epochs=50, imgsz=640, ba
             batch=batch,
             device='auto',
             project='runs/detect',
-            name='yolov8n_baseline',
+            name='yolov8n_smoke_test',
             save=True,
             plots=True
         )
@@ -242,14 +325,32 @@ def evaluate_model(model, val_data_path):
         }
 
 def main():
-    print("=== YOLOv8n Baseline Training ===\n")
+    print("=== FORCE REINSTALL TORCHVISION + YOLO SMOKE TEST ===")
     
-    # 1. Install packages
-    print("1. Installing required packages...")
+    # 1. Force reinstall torchvision
+    print("\n1. Force reinstalling torchvision...")
+    if not force_reinstall_torchvision():
+        print("✗ Failed to reinstall torchvision")
+        print("METRIC:val_score=0.0")
+        return
+    
+    # 2. Test NMS operator
+    print("\n2. Testing NMS operator...")
+    if not test_nms_operator():
+        print("✗ NMS operator still not working")
+        # Try to get more diagnostic info
+        test_torch_extensions()
+        print("METRIC:val_score=0.0")
+        return
+    
+    print("✓ NMS operator working!")
+    
+    # 3. Install other packages
+    print("\n3. Installing other packages...")
     install_packages()
     
-    # 2. Load and analyze data
-    print("\n2. Loading COCO annotations...")
+    # 4. Load and analyze data
+    print("\n4. Loading COCO annotations...")
     annotations_path = Path("data/train/annotations.json")
     images_dir = Path("data/train/images")
     
@@ -266,33 +367,32 @@ def main():
     coco_data = load_coco_annotations(annotations_path)
     print(f"Loaded {len(coco_data['images'])} images, {len(coco_data['annotations'])} annotations, {len(coco_data['categories'])} categories")
     
-    # 3. Create train/val split
-    print("\n3. Creating 90/10 train/val split...")
+    # 5. Create train/val split
+    print("\n5. Creating 90/10 train/val split...")
     train_data, val_data = create_train_val_split(coco_data, val_ratio=0.1, seed=42)
     
-    # 4. Convert to YOLO format
-    print("\n4. Converting to YOLO format...")
+    # 6. Convert to YOLO format
+    print("\n6. Converting to YOLO format...")
     output_dir = Path("yolo_dataset")
     output_dir.mkdir(exist_ok=True)
     
     convert_to_yolo_format(train_data, images_dir, output_dir, 'train')
     convert_to_yolo_format(val_data, images_dir, output_dir, 'val')
     
-    # 5. Create dataset.yaml
-    print("\n5. Creating dataset configuration...")
-    # Use nc=356 (categories 0-355, since we have category IDs 0-356 but want 356 classes total)
+    # 7. Create dataset.yaml
+    print("\n7. Creating dataset configuration...")
     num_classes = len(coco_data['categories'])
     print(f"Number of classes: {num_classes}")
     
     dataset_yaml_path = create_dataset_yaml(output_dir, num_classes)
     print(f"Created dataset.yaml at {dataset_yaml_path}")
     
-    # 6. Train model
-    print("\n6. Training YOLOv8n model...")
+    # 8. Train model (smoke test with 5 epochs)
+    print("\n8. Training YOLOv8n model (5 epoch smoke test)...")
     model, train_results = train_yolo_model(
         dataset_yaml_path, 
         model_size='n', 
-        epochs=50, 
+        epochs=5,  # Short smoke test
         imgsz=640, 
         batch=16
     )
@@ -304,8 +404,8 @@ def main():
     
     print("Training completed successfully")
     
-    # 7. Evaluate model
-    print("\n7. Evaluating model...")
+    # 9. Evaluate model
+    print("\n9. Evaluating model...")
     eval_results = evaluate_model(model, dataset_yaml_path)
     
     # Print all metrics
@@ -325,7 +425,7 @@ def main():
             if isinstance(value, (int, float)):
                 print(f"METRIC:{key}={value:.4f}")
     
-    print("\n=== Baseline Training Complete ===")
+    print("\n=== SMOKE TEST COMPLETE ===")
 
 if __name__ == "__main__":
     main()

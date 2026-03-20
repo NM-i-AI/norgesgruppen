@@ -80,3 +80,11 @@
 - Result: Found torch 2.6.0+cu124 installed but cannot uninstall due to missing RECORD file; torchvision import still causes NMS operator error
 - Side effects: Confirmed the environment has a non-standard torch installation that cannot be easily modified
 - Takeaway: The torch installation appears to be system-level or conda-managed and cannot be fixed with pip, requiring a different approach to resolve the NMS operator issue.
+
+## Experiment 6 — Force-reinstall torchvision with --no-deps and verify NMS
+- Status: FAILED
+- Hypothesis: Using pip install --force-reinstall --no-deps for torchvision will overwrite the broken installation without needing to uninstall first, fixing the NMS operator
+- Change: Force reinstalled torchvision with --no-deps flag and reduced training to 5 epochs for smoke test
+- Result: NMS operator now works correctly, but training failed due to PyTorch 2.10 weights_only=True security change preventing loading of YOLOv8 pretrained weights
+- Side effects: Other package installations (ultralytics, timm) still fail due to torch RECORD file issues
+- Takeaway: The NMS fix worked, but we need to either downgrade PyTorch or use weights_only=False to load YOLOv8 pretrained weights.
