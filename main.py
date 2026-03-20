@@ -6,6 +6,31 @@ import numpy as np
 from collections import defaultdict
 import random
 
+def load_exp006_model():
+    """Load the best model from exp-006 training run"""
+    print("Loading best model from exp-006...")
+    
+    # Look for the best model from exp-006 (multiclass_full_dataset)
+    model_paths = [
+        'runs/detect/multiclass_full_dataset/weights/best.pt',
+        'runs/detect/multiclass_full_dataset2/weights/best.pt',
+        'runs/detect/multiclass_full_dataset3/weights/best.pt',
+        'runs/detect/multiclass_full_dataset4/weights/best.pt',
+        'runs/detect/multiclass_full_dataset5/weights/best.pt'
+    ]
+    
+    for model_path in model_paths:
+        if Path(model_path).exists():
+            print(f"Found model at: {model_path}")
+            model = YOLO(model_path)
+            return model
+    
+    # If no trained model found, fall back to training a new one
+    print("No pre-trained model found. Training new model...")
+    dataset_yaml_path, category_mapping, val_ids = convert_coco_to_yolo_multiclass()
+    model, _ = train_yolo_multiclass_full(dataset_yaml_path)
+    return model
+
 def convert_coco_to_yolo_multiclass():
     """Convert COCO annotations to YOLO format with all categories - ALL IMAGES FOR TRAINING"""
     print("Converting COCO annotations to YOLO format (multi-class, all images for training)...")
@@ -96,9 +121,6 @@ def convert_coco_to_yolo_multiclass():
     # Process all images as training data
     process_split(train_ids, 'train')
     
-    # Create empty val split for YOLO (required but not used for training)
-    # We'll evaluate manually on the held-out val set
-    
     # Create dataset.yaml
     dataset_yaml = {
         'path': str(yolo_dir.resolve()),
@@ -124,15 +146,15 @@ def train_yolo_multiclass_full(dataset_yaml_path):
     # Initialize YOLOv8l model (same as exp-004)
     model = YOLO('yolov8l.pt')  # Load pretrained YOLOv8l model
     
-    # Training parameters - same as exp-004 but with val=False since we're using all data
+    # Training parameters - same as exp-006
     results = model.train(
         data=str(dataset_yaml_path),
-        epochs=80,  # Same as exp-004
+        epochs=80,  # Same as exp-006
         imgsz=1280,
-        batch=6,  # Same as exp-004
+        batch=6,  # Same as exp-006
         device=0 if torch.cuda.is_available() else 'cpu',
         project='runs/detect',
-        name='multiclass_full_dataset',
+        name='multiclass_full_dataset_tta',
         save=True,
         save_period=20,
         val=False,  # Disable YOLO validation since we're using all data for training
@@ -140,20 +162,20 @@ def train_yolo_multiclass_full(dataset_yaml_path):
         verbose=True,
         patience=20,
         
-        # Detection-specific parameters (same as exp-004)
+        # Detection-specific parameters (same as exp-006)
         max_det=300,
         conf=0.001,
         iou=0.7,
         
-        # Learning rate schedule (same as exp-004)
+        # Learning rate schedule (same as exp-006)
         lr0=0.01,
         lrf=0.01,
         
-        # Optimizer settings (same as exp-004)
+        # Optimizer settings (same as exp-006)
         optimizer='AdamW',
         weight_decay=0.0005,
         
-        # Enhanced data augmentation (same as exp-004)
+        # Enhanced data augmentation (same as exp-006)
         hsv_h=0.015,
         hsv_s=0.7,
         hsv_v=0.4,
@@ -165,15 +187,15 @@ def train_yolo_multiclass_full(dataset_yaml_path):
         flipud=0.0,
         fliplr=0.5,
         mosaic=1.0,
-        mixup=0.15,     # Same as exp-004
-        copy_paste=0.3, # Same as exp-004
+        mixup=0.15,     # Same as exp-006
+        copy_paste=0.3, # Same as exp-006
         
-        # Warmup settings (same as exp-004)
+        # Warmup settings (same as exp-006)
         warmup_epochs=3.0,
         warmup_momentum=0.8,
         warmup_bias_lr=0.1,
         
-        # Loss function weights (same as exp-004)
+        # Loss function weights (same as exp-006)
         box=7.5,
         cls=0.5,
         dfl=1.5,
@@ -184,9 +206,10 @@ def train_yolo_multiclass_full(dataset_yaml_path):
     
     return model, results
 
-def evaluate_multiclass_model_on_val_set(model, val_ids, category_mapping):
-    """Evaluate multi-class model on held-out validation set"""
-    print(f"Evaluating multi-class model on {len(val_ids)} held-out validation images...")
+def evaluate_model_with_tta(model, val_ids, category_mapping, use_tta=True):
+    """Evaluate model on held-out validation set with optional TTA"""
+    tta_str = "WITH TTA" if use_tta else "WITHOUT TTA"
+    print(f"Evaluating model on {len(val_ids)} held-out validation images {tta_str}...")
     
     # Load validation data for custom evaluation
     with open('data/train/annotations.json', 'r') as f:
@@ -216,13 +239,14 @@ def evaluate_multiclass_model_on_val_set(model, val_ids, category_mapping):
         if not img_path.exists():
             continue
             
-        # Run inference
+        # Run inference with or without TTA
         results = model.predict(
             source=str(img_path),
             imgsz=1280,
             conf=0.25,
             iou=0.7,
             max_det=300,
+            augment=use_tta,  # KEY CHANGE: Enable/disable TTA
             verbose=False
         )
         
@@ -363,104 +387,98 @@ def evaluate_multiclass_model_on_val_set(model, val_ids, category_mapping):
     
     return detection_map50, classification_map50, detection_recall, classification_recall
 
-def create_multiclass_submission(model, category_mapping, val_ids):
-    """Create submission format predictions with actual category IDs"""
-    print("Creating multi-class submission format predictions...")
-    
-    # Load validation images info
-    with open('data/train/annotations.json', 'r') as f:
-        coco_data = json.load(f)
-    
-    # Create reverse mapping from YOLO class_id to COCO category_id
-    reverse_mapping = {v: k for k, v in category_mapping.items()}
-    
-    submission = []
-    
-    # Run inference on validation images
-    for i, image_id in enumerate(val_ids[:5]):  # Just first 5 for demo
-        img_info = next(img for img in coco_data['images'] if img['id'] == image_id)
-        img_path = Path('data/train/images') / img_info['file_name']
-        
-        if img_path.exists():
-            # Run inference
-            results = model.predict(
-                source=str(img_path),
-                imgsz=1280,
-                conf=0.25,  # Higher confidence for final predictions
-                iou=0.7,
-                max_det=300,
-                verbose=False
-            )
-            
-            # Convert to submission format
-            for result in results:
-                if result.boxes is not None:
-                    boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
-                    scores = result.boxes.conf.cpu().numpy()
-                    classes = result.boxes.cls.cpu().numpy().astype(int)
-                    
-                    for box, score, cls in zip(boxes, scores, classes):
-                        x1, y1, x2, y2 = box
-                        # Convert to COCO format [x, y, width, height]
-                        x, y, w, h = x1, y1, x2 - x1, y2 - y1
-                        
-                        # Map YOLO class_id back to COCO category_id
-                        coco_category_id = reverse_mapping.get(cls, 0)
-                        
-                        submission.append({
-                            "image_id": image_id,
-                            "category_id": coco_category_id,
-                            "bbox": [float(x), float(y), float(w), float(h)],
-                            "score": float(score)
-                        })
-    
-    print(f"Generated {len(submission)} predictions for {len(val_ids[:5])} validation images")
-    return submission
-
 def main():
-    """Main experiment function"""
-    print("=== YOLOv8l Multi-Class Detection - Full Dataset Training (Step 6) ===")
+    """Main experiment function - Test-time augmentation (TTA) on best exp-006 model"""
+    print("=== Test-Time Augmentation (TTA) Experiment - Step 9 ===")
     
     try:
-        # Step 1: Convert COCO to YOLO format (multi-class, all images for training)
-        dataset_yaml_path, category_mapping, val_ids = convert_coco_to_yolo_multiclass()
+        # Step 1: Load the best model from exp-006 or train if needed
+        model = load_exp006_model()
         
-        # Step 2: Train YOLOv8l multi-class model on full dataset
-        model, train_results = train_yolo_multiclass_full(dataset_yaml_path)
+        # Step 2: Set up validation data
+        # Load COCO annotations to get category mapping and val_ids
+        with open('data/train/annotations.json', 'r') as f:
+            coco_data = json.load(f)
         
-        # Step 3: Evaluate model on held-out validation set
-        detection_map50, classification_map50, detection_recall, classification_recall = evaluate_multiclass_model_on_val_set(
-            model, val_ids, category_mapping
+        # Create category mapping (same as training)
+        categories = sorted(coco_data['categories'], key=lambda x: x['id'])
+        category_mapping = {cat['id']: idx for idx, cat in enumerate(categories)}
+        
+        # Define validation set (same split as exp-006)
+        image_info = {img['id']: img for img in coco_data['images']}
+        image_ids = list(image_info.keys())
+        random.seed(42)  # For reproducibility
+        random.shuffle(image_ids)
+        split_idx = int(0.9 * len(image_ids))
+        val_ids = image_ids[split_idx:]
+        
+        print(f"Validation set: {len(val_ids)} images")
+        
+        # Step 3: Evaluate WITHOUT TTA (baseline)
+        print("\n=== Evaluating WITHOUT TTA (baseline) ===")
+        detection_map50_no_tta, classification_map50_no_tta, detection_recall_no_tta, classification_recall_no_tta = evaluate_model_with_tta(
+            model, val_ids, category_mapping, use_tta=False
         )
+        final_score_no_tta = 0.7 * detection_map50_no_tta + 0.3 * classification_map50_no_tta
         
-        # Step 4: Calculate final score
-        final_score = 0.7 * detection_map50 + 0.3 * classification_map50
+        # Step 4: Evaluate WITH TTA
+        print("\n=== Evaluating WITH TTA ===")
+        detection_map50_tta, classification_map50_tta, detection_recall_tta, classification_recall_tta = evaluate_model_with_tta(
+            model, val_ids, category_mapping, use_tta=True
+        )
+        final_score_tta = 0.7 * detection_map50_tta + 0.3 * classification_map50_tta
         
-        # Step 5: Create submission format
-        submission = create_multiclass_submission(model, category_mapping, val_ids)
+        # Step 5: Calculate improvements
+        detection_improvement = ((detection_map50_tta - detection_map50_no_tta) / detection_map50_no_tta * 100) if detection_map50_no_tta > 0 else 0
+        classification_improvement = ((classification_map50_tta - classification_map50_no_tta) / classification_map50_no_tta * 100) if classification_map50_no_tta > 0 else 0
+        final_score_improvement = ((final_score_tta - final_score_no_tta) / final_score_no_tta * 100) if final_score_no_tta > 0 else 0
         
         # Print metrics
-        print(f"\n=== Results ===") 
-        print(f"METRIC:detection_map50={detection_map50:.4f}")
-        print(f"METRIC:classification_map50={classification_map50:.4f}")
-        print(f"METRIC:final_score={final_score:.4f}")
-        print(f"METRIC:detection_recall={detection_recall:.4f}")
-        print(f"METRIC:classification_recall={classification_recall:.4f}")
-        print(f"METRIC:num_categories={len(category_mapping)}")
-        print(f"METRIC:submission_predictions={len(submission)}")
-        print(f"METRIC:training_images={1000}")
+        print(f"\n=== TTA Comparison Results ===")
+        print(f"WITHOUT TTA:")
+        print(f"  detection_map50={detection_map50_no_tta:.4f}")
+        print(f"  classification_map50={classification_map50_no_tta:.4f}")
+        print(f"  final_score={final_score_no_tta:.4f}")
+        
+        print(f"\nWITH TTA:")
+        print(f"  detection_map50={detection_map50_tta:.4f}")
+        print(f"  classification_map50={classification_map50_tta:.4f}")
+        print(f"  final_score={final_score_tta:.4f}")
+        
+        print(f"\nIMPROVEMENTS:")
+        print(f"  detection_improvement={detection_improvement:.2f}%")
+        print(f"  classification_improvement={classification_improvement:.2f}%")
+        print(f"  final_score_improvement={final_score_improvement:.2f}%")
+        
+        # Print final metrics (use TTA results as main metrics)
+        print(f"\n=== Final Metrics (WITH TTA) ===") 
+        print(f"METRIC:detection_map50={detection_map50_tta:.4f}")
+        print(f"METRIC:classification_map50={classification_map50_tta:.4f}")
+        print(f"METRIC:final_score={final_score_tta:.4f}")
+        print(f"METRIC:detection_recall={detection_recall_tta:.4f}")
+        print(f"METRIC:classification_recall={classification_recall_tta:.4f}")
+        print(f"METRIC:detection_improvement_pct={detection_improvement:.2f}")
+        print(f"METRIC:classification_improvement_pct={classification_improvement:.2f}")
+        print(f"METRIC:final_score_improvement_pct={final_score_improvement:.2f}")
+        print(f"METRIC:tta_enabled=1")
         print(f"METRIC:val_images_evaluated={len(val_ids)}")
         
         # Success criteria check
-        exp004_score = 0.7882  # From exp-004
-        if final_score > exp004_score:
-            improvement = ((final_score - exp004_score) / exp004_score) * 100
-            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > exp-004 ({exp004_score:.4f})")
-            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over exp-004")
+        exp006_score = 0.8498  # From exp-006
+        if final_score_tta > exp006_score:
+            improvement = ((final_score_tta - exp006_score) / exp006_score) * 100
+            print(f"\n✅ SUCCESS: Final score WITH TTA ({final_score_tta:.4f}) > exp-006 ({exp006_score:.4f})")
+            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over exp-006")
         else:
-            decline = ((exp004_score - final_score) / exp004_score) * 100
-            print(f"\n❌ BELOW EXP-004: Final score ({final_score:.4f}) <= exp-004 ({exp004_score:.4f})")
-            print(f"📉 DECLINE: -{decline:.1f}% from exp-004")
+            decline = ((exp006_score - final_score_tta) / exp006_score) * 100
+            print(f"\n❌ BELOW EXP-006: Final score WITH TTA ({final_score_tta:.4f}) <= exp-006 ({exp006_score:.4f})")
+            print(f"📉 DECLINE: -{decline:.1f}% from exp-006")
+        
+        # TTA effectiveness check
+        if final_score_tta > final_score_no_tta:
+            print(f"\n✅ TTA EFFECTIVE: TTA improved final_score by {final_score_improvement:.2f}%")
+        else:
+            print(f"\n❌ TTA INEFFECTIVE: TTA did not improve final_score")
         
     except Exception as e:
         print(f"ERROR: {str(e)}")

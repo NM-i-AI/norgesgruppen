@@ -64,3 +64,11 @@
 - Result: final_score 0.8498 → 0.8484 (-0.2% decline)
 - Side effects: Significantly longer training time (1861s vs previous experiments), no memory issues
 - Takeaway: Extended training with stronger augmentation caused slight overfitting rather than improvement, suggesting the model was already well-trained at 80 epochs.
+
+## Experiment 9 — Test-time augmentation (TTA) on best exp-006 model
+- Status: FAILED
+- Hypothesis: TTA (augment=True in YOLO predict) applies horizontal flip and multi-scale inference, improving both detection and classification mAP by 1-3% with no retraining needed
+- Change: Applied test-time augmentation to exp-006 best model using augment=True parameter in YOLO predict
+- Result: final_score 0.8498 → 0.7823 (-7.94%), detection_map50 0.8633 → 0.7935 (-8.08%), classification_map50 0.8183 → 0.7560 (-7.61%)
+- Side effects: Significantly slower inference (28.3ms postprocess vs typical <1ms), no training time impact
+- Takeaway: TTA unexpectedly degraded performance by ~8% across all metrics, suggesting the augmentations may be inappropriate for this specific dataset or model architecture.

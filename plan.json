@@ -1,7 +1,7 @@
 {
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
-  "revision": 4,
+  "revision": 5,
   "current_step": 9,
   "plan": [
     {
@@ -87,30 +87,40 @@
     {
       "step": 9,
       "type": "experiment",
-      "title": "Test-time augmentation (TTA) for detection and classification boost",
-      "hypothesis": "TTA with horizontal flip and multi-scale inference improves both detection and classification mAP by 1-3%",
-      "description": "Use YOLO's built-in TTA (augment=True in predict) which applies horizontal flip and multi-scale. Test on validation set to measure improvement. If too slow, use only horizontal flip. Apply to best model from step 8 or exp-006.",
-      "success_criteria": "final_score improvement of at least 1% over non-TTA baseline",
+      "title": "Test-time augmentation (TTA) on best exp-006 model",
+      "hypothesis": "TTA (augment=True in YOLO predict) applies horizontal flip and multi-scale inference, improving both detection and classification mAP by 1-3% with no retraining needed",
+      "description": "Load the best model from exp-006 training run. Run inference with augment=True on validation set. Compare metrics with and without TTA. This is zero-cost improvement that just requires changing the predict call.",
+      "success_criteria": "final_score > 0.8498 (improvement over exp-006)",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 10,
       "type": "experiment",
-      "title": "YOLOv8x model on full dataset for maximum capacity",
-      "hypothesis": "YOLOv8x (extra-large) has more capacity to learn the 329 categories, improving classification_map50 which is the weaker component",
-      "description": "Train YOLOv8x on full dataset with best hyperparameters from previous experiments. Reduce batch size to 4 if needed for memory. Use 80-100 epochs. Compare against YOLOv8l results.",
-      "success_criteria": "final_score > best previous result",
+      "title": "Confidence threshold optimization with correct evaluation",
+      "hypothesis": "The exp-005 sweep failed due to evaluation bugs. A careful conf threshold sweep (0.1-0.4) with the correct evaluation pipeline from exp-006 will find a better operating point",
+      "description": "Using the exp-006 model, sweep confidence thresholds [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4] during inference on the validation set. Use the exact same evaluation code from exp-006. Pick the best threshold. Combine with TTA if step 9 showed improvement.",
+      "success_criteria": "final_score > 0.8498",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 11,
       "type": "experiment",
-      "title": "Final optimization: ensemble or best single model with optimized inference",
-      "hypothesis": "Combining best detection model with optimized confidence thresholds and optional TTA maximizes final_score",
-      "description": "Take the best performing model from steps 8-10. Fine-tune confidence threshold on validation set (simple sweep of 5-10 values). Combine with TTA if it helped. Ensure model weights < 420MB and inference < 300s. Create clean final main.py.",
-      "success_criteria": "Highest achievable final_score with all optimizations combined",
+      "title": "YOLOv8l with image size 1536 on full dataset",
+      "hypothesis": "Larger input resolution (1536 vs 1280) helps detect and classify smaller products better, especially improving classification_map50 which is the weaker metric",
+      "description": "Train YOLOv8l on full dataset with imgsz=1536 (up from 1280), 80 epochs, batch=4 (reduced for memory). Keep all other hyperparameters from exp-006. Larger resolution gives the model more detail for classification.",
+      "success_criteria": "final_score > 0.86",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 12,
+      "type": "experiment",
+      "title": "Final model: combine best settings (resolution, TTA, confidence) for maximum score",
+      "hypothesis": "Combining the best resolution, TTA setting, and confidence threshold from previous experiments yields the highest final_score",
+      "description": "Take the best model from steps 9-11. Apply optimal confidence threshold and TTA setting. Ensure model weights < 420MB and inference < 300s. Create clean final main.py.",
+      "success_criteria": "final_score > 0.87",
       "status": "pending",
       "experiment_id": null
     }
