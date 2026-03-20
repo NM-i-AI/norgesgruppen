@@ -32,3 +32,11 @@
 - Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading YOLOv8m pretrained weights
 - Side effects: None observed (training never started)
 - Takeaway: Need to either set weights_only=False in torch.load or use torch.serialization.add_safe_globals to allow DetectionModel loading in newer PyTorch versions.
+
+## Experiment 5 — YOLOv8x nc=1 detection-only at 1280px
+- Status: FAILED
+- Hypothesis: Single-class detector achieves higher detection mAP since it only needs to localize products without distinguishing 356 classes
+- Change: Modified main.py to train YOLOv8x with nc=1 (single-class detection) instead of multi-class classification
+- Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading YOLOv8x pretrained weights
+- Side effects: None observed (training never started)
+- Takeaway: Need to handle PyTorch 2.6's new weights_only=True default by either setting weights_only=False or using torch.serialization.safe_globals() context manager when loading YOLO pretrained weights.

@@ -295,7 +295,7 @@ def evaluate_predictions(gt_json_path, predictions, iou_threshold=0.5):
         print(f"Error during evaluation: {e}")
         return 0.0, 0.0, 0.0
 
-def copy_images_to_yolo_dirs():
+def copy_images_to_yolo_dirs(dataset_name='yolo_sc'):
     """Copy images from data/train/images to YOLO train/val directories"""
     print("Copying images to YOLO directories...")
     
@@ -308,7 +308,7 @@ def copy_images_to_yolo_dirs():
         val_split = json.load(f)
     
     # Copy train images
-    train_img_dir = Path('data/yolo_mc/train/images')
+    train_img_dir = Path(f'data/{dataset_name}/train/images')
     for img in train_split['images']:
         src = Path('data/train/images') / img['file_name']
         dst = train_img_dir / img['file_name']
@@ -316,7 +316,7 @@ def copy_images_to_yolo_dirs():
             shutil.copy2(src, dst)
     
     # Copy val images
-    val_img_dir = Path('data/yolo_mc/val/images')
+    val_img_dir = Path(f'data/{dataset_name}/val/images')
     for img in val_split['images']:
         src = Path('data/train/images') / img['file_name']
         dst = val_img_dir / img['file_name']
@@ -325,7 +325,7 @@ def copy_images_to_yolo_dirs():
     
     print(f"Copied {len(train_split['images'])} train images and {len(val_split['images'])} val images")
 
-def train_yolo_model(model_size='m', nc=356, imgsz=1280, epochs=100, batch=16, close_mosaic=20):
+def train_yolo_model(model_size='x', nc=1, imgsz=1280, epochs=200, batch=8, close_mosaic=50, dataset_name='yolo_sc'):
     """Train YOLO model"""
     print(f"Training YOLOv8{model_size} with nc={nc}, imgsz={imgsz}, epochs={epochs}...")
     
@@ -334,7 +334,7 @@ def train_yolo_model(model_size='m', nc=356, imgsz=1280, epochs=100, batch=16, c
     
     # Train the model
     results = model.train(
-        data='data/yolo_mc/dataset.yaml',
+        data=f'data/{dataset_name}/dataset.yaml',
         epochs=epochs,
         imgsz=imgsz,
         batch=batch,
@@ -350,7 +350,7 @@ def train_yolo_model(model_size='m', nc=356, imgsz=1280, epochs=100, batch=16, c
     print(f"Training completed. Best weights: {model.trainer.best}")
     return model, results
 
-def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1):
+def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1, dataset_name='yolo_sc'):
     """Run inference on validation set and evaluate"""
     print(f"Running inference with {model_path}...")
     
@@ -363,7 +363,7 @@ def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1)
     
     # Run inference on all validation images
     predictions = []
-    val_img_dir = Path('data/yolo_mc/val/images')
+    val_img_dir = Path(f'data/{dataset_name}/val/images')
     
     for img_info in val_split['images']:
         img_path = val_img_dir / img_info['file_name']
@@ -408,8 +408,8 @@ def run_inference_and_evaluate(model_path, val_split_path, imgsz=1280, conf=0.1)
     return val_score, det_map, cls_map, predictions
 
 def main():
-    """Main training and evaluation pipeline"""
-    print("=== YOLOv8m BASELINE TRAINING ===")
+    """Main training and evaluation pipeline for YOLOv8x nc=1"""
+    print("=== YOLOv8x SINGLE-CLASS DETECTION TRAINING ===")
     
     try:
         # Check if splits exist, create if not
@@ -417,30 +417,33 @@ def main():
             print("Creating train/val split...")
             create_train_val_split(seed=42)
         
-        # Check if YOLO data exists, create if not
-        if not Path('data/yolo_mc/dataset.yaml').exists():
-            print("Converting to YOLO format...")
+        # Check if YOLO single-class data exists, create if not
+        dataset_name = 'yolo_sc'  # single-class
+        if not Path(f'data/{dataset_name}/dataset.yaml').exists():
+            print("Converting to YOLO single-class format...")
             with open('data/splits/train_split.json', 'r') as f:
                 train_split = json.load(f)
             with open('data/splits/val_split.json', 'r') as f:
                 val_split = json.load(f)
             
-            convert_coco_to_yolo(train_split, 'data/yolo_mc/train', nc=356)
-            convert_coco_to_yolo(val_split, 'data/yolo_mc/val', nc=356)
-            create_yolo_dataset_yaml('data/yolo_mc/train', 'data/yolo_mc/val', nc=356, output_path='data/yolo_mc/dataset.yaml')
+            # Convert with nc=1 for single-class detection
+            convert_coco_to_yolo(train_split, f'data/{dataset_name}/train', nc=1)
+            convert_coco_to_yolo(val_split, f'data/{dataset_name}/val', nc=1)
+            create_yolo_dataset_yaml(f'data/{dataset_name}/train', f'data/{dataset_name}/val', nc=1, output_path=f'data/{dataset_name}/dataset.yaml')
         
         # Copy images to YOLO directories
-        copy_images_to_yolo_dirs()
+        copy_images_to_yolo_dirs(dataset_name)
         
-        # Train YOLOv8m
-        print("\n=== TRAINING YOLOv8m ====")
+        # Train YOLOv8x single-class
+        print("\n=== TRAINING YOLOv8x nc=1 ====")
         model, results = train_yolo_model(
-            model_size='m',
-            nc=356,
+            model_size='x',
+            nc=1,
             imgsz=1280,
-            epochs=100,
-            batch=16,
-            close_mosaic=20
+            epochs=200,
+            batch=8,
+            close_mosaic=50,
+            dataset_name=dataset_name
         )
         
         # Get best model path
@@ -453,13 +456,14 @@ def main():
             best_model_path,
             'data/splits/val_split.json',
             imgsz=1280,
-            conf=0.1
+            conf=0.1,
+            dataset_name=dataset_name
         )
         
         # Print final results
         print("\n=== FINAL RESULTS ====")
         print(f"Detection mAP@0.5: {det_map:.4f}")
-        print(f"Classification mAP@0.5: {cls_map:.4f}")
+        print(f"Classification mAP@0.5: {cls_map:.4f} (expected 0.0 for nc=1 model)")
         print(f"Val Score: {val_score:.4f}")
         
         # Output metrics for orchestrator
@@ -468,6 +472,7 @@ def main():
         print(f"METRIC:classification_map={cls_map:.4f}")
         print(f"METRIC:num_predictions={len(predictions)}")
         print(f"METRIC:model_path={best_model_path}")
+        print(f"METRIC:model_type=yolov8x_nc1")
         
     except Exception as e:
         print(f"Error in training pipeline: {e}")
