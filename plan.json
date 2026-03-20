@@ -1,7 +1,7 @@
 {
   "session_id": "2026-03-20-22-30",
   "created_at": "2026-03-20T22:30:12.951500+00:00",
-  "revision": 4,
+  "revision": 5,
   "current_step": 7,
   "plan": [
     {
@@ -67,30 +67,30 @@
     {
       "step": 7,
       "type": "experiment",
-      "title": "Alternative: RT-DETR or pure-Python NMS workaround",
-      "hypothesis": "If torchvision NMS cannot be fixed, we can either use RT-DETR (no NMS needed) or monkey-patch torchvision.ops.nms with a pure-Python implementation",
-      "description": "If step 6 fails: (A) Try RT-DETR from ultralytics which uses transformer decoder instead of NMS. Train rtdetr-l with nc=356, epochs=5. (B) Alternatively, monkey-patch torchvision.ops.nms with a pure-Python/numpy implementation before importing ultralytics. (C) As last resort, try mmdetection or detectron2 which may handle NMS differently.",
-      "success_criteria": "Model completes training and produces val_score > 0",
+      "title": "Fix weights_only=True and run YOLOv8n 5-epoch smoke test",
+      "hypothesis": "Monkey-patching torch.load to set weights_only=False (or using a compatible ultralytics version) will allow YOLOv8 pretrained weights to load, enabling training to complete with val_score > 0.0",
+      "description": "Keep the torchvision force-reinstall fix from exp-6. Before importing ultralytics, monkey-patch torch.load: save original torch.load, replace with wrapper that forces weights_only=False. Also try pinning ultralytics to a newer version (8.3.x) that handles torch 2.6 compatibility. Train YOLOv8n for 5 epochs as smoke test. If monkey-patching doesn't work, try setting TORCH_FORCE_WEIGHTS_ONLY=0 env var, or downloading weights manually and loading with safe settings.",
+      "success_criteria": "Training completes without errors and val_score > 0.0",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 8,
       "type": "experiment",
-      "title": "YOLOv8m full training at 640px (50-100 epochs)",
-      "hypothesis": "With the environment working, YOLOv8m with proper training achieves val_score > 0.10",
-      "description": "Train YOLOv8m with nc=356, imgsz=640, epochs=100, batch=16, patience=30. Use proper COCO evaluation with pycocotools for detection mAP and classification accuracy.",
-      "success_criteria": "val_score > 0.10",
+      "title": "YOLOv8m training at 640px for 30+ epochs",
+      "hypothesis": "With environment working, YOLOv8m with proper training achieves val_score > 0.05",
+      "description": "Train YOLOv8m with nc=356, imgsz=640, epochs=50, batch=16, patience=20. Keep the torch.load monkey-patch. Use proper evaluation.",
+      "success_criteria": "val_score > 0.05",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 9,
       "type": "experiment",
-      "title": "Higher resolution and model improvements",
-      "hypothesis": "1280px resolution and/or larger model improves detection of small products",
-      "description": "Train YOLOv8m or YOLOv8l at imgsz=1280, batch=4-8. Compare with 640px baseline. Try augmentation tuning (mosaic, mixup, copy-paste).",
-      "success_criteria": "val_score improves over step 8 baseline",
+      "title": "Extended training with YOLOv8m/l at 640-1280px",
+      "hypothesis": "Longer training and/or higher resolution improves val_score significantly",
+      "description": "Train YOLOv8m or YOLOv8l with epochs=100, imgsz=640 or 1280, batch adjusted for memory. Add augmentation tuning.",
+      "success_criteria": "val_score > 0.10",
       "status": "pending",
       "experiment_id": null
     },
@@ -98,9 +98,9 @@
       "step": 10,
       "type": "experiment",
       "title": "Final pipeline optimization and submission",
-      "hypothesis": "Tuned thresholds and ensemble/TTA yield best val_score",
-      "description": "Assemble final pipeline with best model. Tune confidence thresholds, NMS IoU. Add TTA if time permits. Build run.py for submission.",
-      "success_criteria": "Best achievable val_score with clean submission format",
+      "hypothesis": "Tuned thresholds and proper evaluation pipeline yield best val_score",
+      "description": "Assemble final pipeline with best model. Tune confidence thresholds, NMS IoU. Build proper run.py for submission.",
+      "success_criteria": "val_score > 0.15",
       "status": "pending",
       "experiment_id": null
     }
