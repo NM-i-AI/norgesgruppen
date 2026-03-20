@@ -24,3 +24,11 @@
 - Result: Successfully analyzed COCO dataset (248 images, 22,731 annotations, 356 categories) and confirmed environment readiness
 - Side effects: None observed
 - Takeaway: Dataset is properly formatted COCO with significant class imbalance (41 categories have ≤1 annotations), ready for YOLOv8 training after package installation.
+
+## Experiment 2 — Setup environment and create train/val split
+- Status: SUCCESS
+- Hypothesis: We can create a proper 90/10 stratified split and verify all dependencies work
+- Change: Implemented environment setup with dependency installation and created 90/10 train/val split (224/24 images) with COCO format validation
+- Result: Split created successfully with 0.097 validation ratio, but PIL installation failed (dependencies_ok=0.0 vs target 1.0)
+- Side effects: All images were categorized as "unassigned" section, preventing true stratification by store section
+- Takeaway: The split is functional for training despite PIL failure (Pillow likely already available), but store section metadata appears missing from the dataset.
