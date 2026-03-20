@@ -1,1 +1,558 @@
-{}
+{
+  "session_id": "2026-03-20-22-29",
+  "created_at": "2026-03-20T22:29:46.525530+00:00",
+  "revision": 0,
+  "current_step": 1,
+  "plan": [
+    {
+      "step": 1,
+      "type": "exploration",
+      "title": "Explore data structure and annotations",
+      "hypothesis": null,
+      "description": "Write scratch.py to examine: (1) image count and sizes in data/train/images/, (2) annotations.json structure \u2014 number of annotations, categories, images, (3) distribution of annotations per image, (4) distribution of annotations per category, (5) category names and IDs, (6) check for 'corrected' field, (7) examine data/products/ structure and data/metadata.json.",
+      "success_criteria": "Clear understanding of data dimensions, category distribution, image sizes, reference product availability logged to stdout",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 2,
+      "type": "exploration",
+      "title": "Verify package versions and install pinned ultralytics",
+      "hypothesis": null,
+      "description": "In scratch.py, check installed versions of torch, torchvision, timm, ultralytics. Install ultralytics==8.1.0 if not already installed. Verify CUDA availability and GPU type.",
+      "success_criteria": "ultralytics==8.1.0 confirmed, torch/torchvision/CUDA working, GPU detected",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 3,
+      "type": "experiment",
+      "title": "Create 90/10 stratified train/val split",
+      "hypothesis": null,
+      "description": "Write a script to split annotations.json into train_split.json and val_split.json. Use seed=42, split by image. Stratify by store section (Egg, Frokost, Knekkebrod, Varmedrikker \u2014 infer from image filenames or folder structure). Ensure ~223 train / ~25 val images. Output both files in COCO format with all annotations for each image staying together.",
+      "success_criteria": "Two valid COCO-format JSON files created, proportional section representation in val, counts verified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 4,
+      "type": "experiment",
+      "title": "Write evaluation function",
+      "hypothesis": null,
+      "description": "Implement an evaluation function using pycocotools that computes: (1) detection_mAP@0.5 \u2014 treat all predictions as single class, (2) classification_mAP@0.5 \u2014 use actual category_ids, (3) val_score = 0.7 * detection_mAP + 0.3 * classification_mAP. Test with dummy predictions to verify it works.",
+      "success_criteria": "Function returns correct val_score components, tested with dummy data",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 5,
+      "type": "experiment",
+      "title": "Convert COCO annotations to YOLO format",
+      "hypothesis": null,
+      "description": "Write a conversion script that creates YOLO-format label files from the COCO train_split.json and val_split.json. Create proper directory structure (images/train, images/val, labels/train, labels/val) and a dataset YAML file. Handle the 357 categories (0-356).",
+      "success_criteria": "YOLO dataset directory created with correct label files, YAML config written",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 6,
+      "type": "experiment",
+      "title": "YOLOv8n baseline with nc=357 at 640px",
+      "hypothesis": "A YOLOv8n baseline achieves val_score > 0.15 with 357 classes at 640px resolution",
+      "description": "Train YOLOv8n on the train split with nc=357, imgsz=640, epochs=100, batch=16. Evaluate on val split using the evaluation function. Record val_score, detection_mAP, classification_mAP, and training time.",
+      "success_criteria": "Baseline val_score recorded, model trains without errors",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 7,
+      "type": "experiment",
+      "title": "YOLOv8s with nc=357 at 640px",
+      "hypothesis": "YOLOv8s improves val_score by 5+ points over YOLOv8n",
+      "description": "Train YOLOv8s with same settings as baseline. Compare val_score.",
+      "success_criteria": "val_score improvement over YOLOv8n recorded",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 8,
+      "type": "experiment",
+      "title": "YOLOv8m with nc=357 at 640px",
+      "hypothesis": "YOLOv8m further improves val_score over YOLOv8s",
+      "description": "Train YOLOv8m with nc=357, imgsz=640, epochs=150, appropriate batch size. Evaluate and compare.",
+      "success_criteria": "val_score compared to previous models",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 9,
+      "type": "experiment",
+      "title": "YOLOv8l with nc=357 at 1280px",
+      "hypothesis": "Larger model + higher resolution significantly improves detection on dense shelves",
+      "description": "Train YOLOv8l with nc=357, imgsz=1280, epochs=200, batch=4 (or 8 with gradient accumulation). Use close_mosaic=50. Evaluate and compare.",
+      "success_criteria": "val_score improvement over previous best",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 10,
+      "type": "experiment",
+      "title": "YOLOv8x with nc=357 at 1280px",
+      "hypothesis": "YOLOv8x at 1280px is the best single YOLO model for this task",
+      "description": "Train YOLOv8x with nc=357, imgsz=1280, epochs=300, batch=4, close_mosaic=50. This is expected to be the strongest single YOLO model. Record all metrics.",
+      "success_criteria": "val_score recorded, compared to YOLOv8l",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 11,
+      "type": "experiment",
+      "title": "YOLOv8x nc=1 (detection-only) at 1280px",
+      "hypothesis": "A single-class detector achieves higher detection_mAP than nc=357 since it doesn't need to distinguish classes",
+      "description": "Convert annotations to single-class (all category_id=0). Train YOLOv8x with nc=1, imgsz=1280, epochs=300. Evaluate detection_mAP@0.5 only. Compare detection recall to nc=357 model.",
+      "success_criteria": "detection_mAP improvement over nc=357 model quantified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 12,
+      "type": "exploration",
+      "title": "Explore reference product images for embedding gallery",
+      "hypothesis": null,
+      "description": "Examine data/products/ directory: count products with reference images, image types available (main.jpg, front.jpg, etc.), image quality/sizes. Cross-reference with category IDs in annotations. Determine coverage \u2014 how many of the 357 categories have reference images?",
+      "success_criteria": "Complete mapping of category_id to available reference images, coverage statistics",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 13,
+      "type": "experiment",
+      "title": "Build DINOv2-base embedding pipeline",
+      "hypothesis": "DINOv2-base embeddings can distinguish grocery products via kNN on reference images",
+      "description": "Implement: (1) Load DINOv2-base from torch hub or timm, (2) Extract embeddings for all reference product images \u2192 gallery, (3) Extract embeddings for training annotation crops, (4) Test kNN classification accuracy on val split crops (using ground truth boxes). Measure top-1 and top-5 accuracy.",
+      "success_criteria": "kNN classification accuracy on val crops measured, gallery built successfully",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 14,
+      "type": "experiment",
+      "title": "Two-stage pipeline: nc=1 YOLO + DINOv2 classification",
+      "hypothesis": "nc=1 detector + DINOv2 classification achieves higher val_score than nc=357 YOLO alone",
+      "description": "Combine the nc=1 YOLOv8x detector with DINOv2-base kNN classification. For each detection, crop from original resolution image, extract DINOv2 embedding, find nearest neighbor in gallery. Evaluate full val_score.",
+      "success_criteria": "val_score exceeds best nc=357 YOLO model",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 15,
+      "type": "experiment",
+      "title": "Augment gallery with training crops",
+      "hypothesis": "Adding training annotation crops to the DINOv2 gallery improves classification accuracy",
+      "description": "Extract crops from all training images using ground truth boxes. Compute DINOv2 embeddings. Add to gallery alongside reference images (with configurable weighting). Re-evaluate kNN classification on val split.",
+      "success_criteria": "Classification mAP improvement measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 16,
+      "type": "experiment",
+      "title": "Tune kNN hyperparameters",
+      "hypothesis": "Optimal k and temperature differ from defaults and can improve classification by 2+ points",
+      "description": "Sweep kNN parameters on val split: k=[1,3,5,7,11], temperature=[0.01,0.05,0.1,0.5], distance weighting vs majority voting. Use ground truth val boxes to isolate classification quality. Also test cosine vs L2 distance.",
+      "success_criteria": "Best kNN configuration identified with measurable improvement",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 17,
+      "type": "experiment",
+      "title": "NMS and score threshold tuning",
+      "hypothesis": "Tuning NMS IoU threshold and confidence threshold improves detection mAP on dense shelves",
+      "description": "Using the best YOLO model, sweep: NMS IoU threshold [0.4, 0.5, 0.6, 0.7, 0.8], confidence threshold [0.05, 0.1, 0.15, 0.2, 0.25, 0.3]. Evaluate val_score for each combination.",
+      "success_criteria": "Optimal thresholds found, val_score improvement quantified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 18,
+      "type": "experiment",
+      "title": "Test-time augmentation (TTA)",
+      "hypothesis": "TTA improves detection mAP by 1-2 points",
+      "description": "Run inference with augment=True on the best YOLO model. Compare val_score with and without TTA. Measure inference time increase.",
+      "success_criteria": "TTA impact on val_score and inference time measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 19,
+      "type": "experiment",
+      "title": "SAHI-style tiled inference",
+      "hypothesis": "Tiled inference significantly improves detection of small products, boosting detection_mAP by 3+ points",
+      "description": "Implement sliced inference: split each image into overlapping tiles (e.g., 1280x1280 with stride 960), run YOLO on each tile + full image, merge detections with WBF. Evaluate val_score. Measure inference time per image.",
+      "success_criteria": "val_score improvement from tiling quantified, inference time within 300s budget",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 20,
+      "type": "experiment",
+      "title": "RT-DETR-l training",
+      "hypothesis": "RT-DETR-l provides different error patterns from YOLO, useful for ensemble",
+      "description": "Train RT-DETR-l with nc=357, imgsz=1280, epochs=200. Evaluate standalone val_score. Compare detection patterns to YOLOv8x \u2014 look for complementary strengths.",
+      "success_criteria": "RT-DETR-l val_score recorded, error analysis compared to YOLO",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 21,
+      "type": "experiment",
+      "title": "WBF ensemble: YOLOv8x + RT-DETR-l",
+      "hypothesis": "Ensembling YOLO + RT-DETR with WBF improves val_score by 2+ points over best single model",
+      "description": "Combine predictions from YOLOv8x and RT-DETR-l using Weighted Boxes Fusion. Tune WBF parameters (iou_threshold, skip_box_threshold, weights). Evaluate val_score.",
+      "success_criteria": "Ensemble val_score exceeds best single model",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 22,
+      "type": "experiment",
+      "title": "Confidence-gated classification: YOLO classes vs DINOv2",
+      "hypothesis": "Using YOLO class predictions when confident and DINOv2 when uncertain improves classification mAP",
+      "description": "For each detection, compare YOLO class confidence vs DINOv2 embedding similarity. Use a threshold to decide which classification to trust. Sweep threshold on val split. Also try: always use DINOv2, always use YOLO, weighted combination.",
+      "success_criteria": "Best gating strategy identified, val_score improvement measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 23,
+      "type": "experiment",
+      "title": "DINOv2-large vs DINOv2-base comparison",
+      "hypothesis": "DINOv2-large embeddings improve classification mAP by 3+ points over base",
+      "description": "Load DINOv2-large (ViT-L/14), rebuild gallery, re-evaluate kNN classification on val split using ground truth boxes. Compare to DINOv2-base. Check model size for submission budget.",
+      "success_criteria": "Classification accuracy improvement quantified, model size checked against 420MB budget",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 24,
+      "type": "experiment",
+      "title": "Fine-tune projection head on DINOv2 embeddings",
+      "hypothesis": "A trained projection head on frozen DINOv2 features improves classification by learning product-specific distinctions",
+      "description": "Freeze DINOv2-base, train a 2-layer MLP projection head using ArcFace or contrastive loss on training crops + reference images. Use the projected embeddings for kNN. Evaluate on val split.",
+      "success_criteria": "Classification mAP improvement over raw DINOv2 embeddings",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 25,
+      "type": "experiment",
+      "title": "YOLOv8x at 1280px with extended training (500 epochs)",
+      "hypothesis": "Longer training with 357 classes benefits from more epochs due to the extreme multi-class nature",
+      "description": "Train YOLOv8x with nc=357, imgsz=1280, epochs=500, close_mosaic=100, patience=100. Compare to 300-epoch run.",
+      "success_criteria": "val_score improvement from longer training quantified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 26,
+      "type": "experiment",
+      "title": "Training with label smoothing",
+      "hypothesis": "Label smoothing helps with noisy labels and visually similar categories",
+      "description": "Train YOLOv8x with label_smoothing=0.1, same other settings as best config. Compare val_score.",
+      "success_criteria": "Impact of label smoothing on val_score measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 27,
+      "type": "experiment",
+      "title": "Multi-crop DINOv2 inference",
+      "hypothesis": "Averaging embeddings from multiple crop variations improves classification robustness",
+      "description": "For each detection, extract 4 crop variations: (1) original box, (2) center 80% crop, (3) box with 10% padding, (4) slight brightness augmentation. Average DINOv2 embeddings before kNN lookup. Evaluate on val split.",
+      "success_criteria": "Classification mAP improvement over single-crop",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 28,
+      "type": "experiment",
+      "title": "Per-category adaptive classification thresholds",
+      "hypothesis": "Setting per-category confidence thresholds improves classification mAP by avoiding confident wrong predictions",
+      "description": "On val split, compute optimal confidence threshold per category. For categories where DINOv2 is unreliable, fall back to category_id=0 (doesn't hurt detection score). Implement threshold learning on train split, evaluate on val.",
+      "success_criteria": "val_score improvement from adaptive thresholds",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 29,
+      "type": "experiment",
+      "title": "Co-occurrence priors from store sections",
+      "hypothesis": "Using store section context (Egg, Frokost, etc.) as a prior narrows classification candidates and improves accuracy",
+      "description": "Build category-to-section mapping from training data. At inference, first classify the image's section (or use spatial clustering), then restrict kNN search to products from that section. Evaluate on val split.",
+      "success_criteria": "Classification mAP improvement from section-based filtering",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 30,
+      "type": "experiment",
+      "title": "YOLOv8x nc=1 at 1280px with tiling + DINOv2 classification",
+      "hypothesis": "Combining the best detection setup (nc=1 + tiling) with best classification (DINOv2) maximizes val_score",
+      "description": "Run nc=1 YOLOv8x with SAHI tiling for detection, then classify all detections with the best DINOv2 pipeline. This combines maximum detection recall with embedding-based classification.",
+      "success_criteria": "val_score exceeds all previous configurations",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 31,
+      "type": "experiment",
+      "title": "RT-DETR-x training",
+      "hypothesis": "RT-DETR-x outperforms RT-DETR-l and provides a stronger ensemble partner",
+      "description": "Train RT-DETR-x with nc=357, imgsz=1280, epochs=200. Compare to RT-DETR-l standalone and in ensemble with YOLO.",
+      "success_criteria": "RT-DETR-x val_score and ensemble contribution measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 32,
+      "type": "experiment",
+      "title": "Three-model WBF ensemble",
+      "hypothesis": "Adding a third model to the ensemble further improves val_score",
+      "description": "Combine YOLOv8x + RT-DETR-l + YOLOv8l (or YOLOv8x at different resolution) with WBF. Tune ensemble weights. Check if inference time fits within 300s budget.",
+      "success_criteria": "Three-model ensemble val_score exceeds two-model ensemble",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 33,
+      "type": "experiment",
+      "title": "Progressive resolution training",
+      "hypothesis": "Training at 640 first then fine-tuning at 1280 is faster and potentially better than training at 1280 throughout",
+      "description": "Train YOLOv8x at 640 for 100 epochs, then continue at 1280 for 200 epochs. Compare val_score and total training time to direct 1280 training.",
+      "success_criteria": "val_score and training time compared to direct high-res training",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 34,
+      "type": "experiment",
+      "title": "Copy-paste augmentation from reference images",
+      "hypothesis": "Synthetic augmentation using reference product photos improves rare category detection",
+      "description": "Implement copy-paste augmentation: paste reference product images (with perspective warps, lighting adjustments) onto shelf backgrounds. Focus on rare categories (<5 training examples). Retrain YOLOv8x with augmented data.",
+      "success_criteria": "val_score improvement, especially for rare categories",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 35,
+      "type": "experiment",
+      "title": "Corrected annotation weighting",
+      "hypothesis": "Upweighting corrected annotations improves model quality",
+      "description": "Identify annotations with corrected=True. Duplicate these in training data (2x or 3x). Retrain and compare val_score.",
+      "success_criteria": "Impact of annotation weighting on val_score measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 36,
+      "type": "experiment",
+      "title": "CLAHE preprocessing for inference",
+      "hypothesis": "Contrast enhancement helps detect products in poorly lit shelf areas",
+      "description": "Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to images before inference. Compare detection results with and without preprocessing on val split.",
+      "success_criteria": "Impact on val_score measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 37,
+      "type": "experiment",
+      "title": "Patch-level DINOv2 matching",
+      "hypothesis": "Using patch tokens instead of CLS token improves classification for partially occluded products",
+      "description": "Extract DINOv2 patch tokens for both query crops and gallery entries. Implement patch-level matching (e.g., average of top-k most similar patches). Compare to CLS-token-only approach on val split.",
+      "success_criteria": "Classification accuracy comparison with CLS-only approach",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 38,
+      "type": "experiment",
+      "title": "Pseudo-labeling at test time",
+      "hypothesis": "Using high-confidence test predictions to augment the gallery improves classification of repeated products",
+      "description": "Implement two-pass inference: (1) Run detector + classifier on all test images, (2) Add high-confidence crops (score > 0.85) to DINOv2 gallery, (3) Re-classify all detections with augmented gallery. Simulate on val split.",
+      "success_criteria": "val_score improvement from pseudo-labeling measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 39,
+      "type": "experiment",
+      "title": "INT8 quantization of YOLO model",
+      "hypothesis": "INT8 quantization reduces model size by ~50% with <1 mAP loss",
+      "description": "Export best YOLO model to ONNX with INT8 quantization. Benchmark val_score vs FP16. Measure size reduction and inference speed change.",
+      "success_criteria": "Size reduction and accuracy tradeoff quantified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 40,
+      "type": "experiment",
+      "title": "DINOv2-large with INT8 YOLO to fit budget",
+      "hypothesis": "INT8 YOLO + FP16 DINOv2-large fits within 420MB and outperforms FP16 YOLO + DINOv2-base",
+      "description": "Combine INT8-quantized YOLOv8x (~65MB) with DINOv2-large FP16 (~300MB). Total ~370MB. Evaluate val_score vs current best configuration.",
+      "success_criteria": "Configuration fits in 420MB and achieves higher val_score",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 41,
+      "type": "experiment",
+      "title": "Rectangular inference mode",
+      "hypothesis": "rect=True preserves aspect ratio better and improves detection on non-square images",
+      "description": "Run inference with rect=True on the best YOLO model. Compare val_score to square inference.",
+      "success_criteria": "Impact of rectangular inference measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 42,
+      "type": "experiment",
+      "title": "Embedding-weighted box fusion",
+      "hypothesis": "Using DINOv2 embedding agreement as a signal during box fusion improves ensemble quality",
+      "description": "When merging overlapping boxes from multiple models via WBF, compute DINOv2 embedding similarity between the crops. Weight boxes higher when models agree on the embedding. Evaluate on val split.",
+      "success_criteria": "val_score improvement over standard WBF",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 43,
+      "type": "experiment",
+      "title": "Train YOLOv8x at 1920px resolution",
+      "hypothesis": "Even higher resolution captures more product detail for dense shelves",
+      "description": "Train YOLOv8x at imgsz=1920 with batch=2 and gradient accumulation. May need to reduce epochs. Evaluate val_score vs 1280.",
+      "success_criteria": "val_score comparison with 1280 resolution",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 44,
+      "type": "experiment",
+      "title": "Class-balanced focal loss training",
+      "hypothesis": "Focal loss with class balancing improves rare category detection",
+      "description": "Train YOLOv8x with focal loss and class frequency-based weighting. Compare classification mAP for rare vs common categories against standard training.",
+      "success_criteria": "Rare category classification improvement measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 45,
+      "type": "experiment",
+      "title": "Gallery composition ablation",
+      "hypothesis": "The optimal mix of reference images vs training crops in the gallery differs from equal weighting",
+      "description": "Test gallery compositions: (1) reference images only, (2) training crops only, (3) references weighted 3x, (4) training crops weighted 2x, (5) equal weight. Evaluate classification mAP for each.",
+      "success_criteria": "Best gallery composition identified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 46,
+      "type": "experiment",
+      "title": "Spatial context features for classification",
+      "hypothesis": "Including surrounding shelf context in the crop improves classification of ambiguous products",
+      "description": "For each detection, extract two crops: (1) tight box, (2) box with 30% context padding. Concatenate or average their DINOv2 embeddings. Compare classification accuracy to tight-crop-only.",
+      "success_criteria": "Impact of context features on classification measured",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 47,
+      "type": "experiment",
+      "title": "Soft-NMS for single model inference",
+      "hypothesis": "Soft-NMS retains more true positives than hard NMS on dense shelves",
+      "description": "Replace hard NMS with Soft-NMS (Gaussian or linear decay) for single model inference. Sweep sigma parameter. Evaluate val_score.",
+      "success_criteria": "Soft-NMS vs hard NMS comparison on val_score",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 48,
+      "type": "experiment",
+      "title": "Close mosaic timing sweep",
+      "hypothesis": "Optimal close_mosaic value differs from default 50 for this dense detection task",
+      "description": "Train YOLOv8x with close_mosaic values [25, 50, 100, 150] (out of total epochs). Compare val_score.",
+      "success_criteria": "Optimal close_mosaic value identified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 49,
+      "type": "experiment",
+      "title": "ONNX export and inference verification",
+      "hypothesis": null,
+      "description": "Export the best YOLO model and DINOv2 model to ONNX format. Verify inference produces identical results to PyTorch. Check ONNX opset \u2264 20. Measure ONNX inference speed.",
+      "success_criteria": "ONNX models produce matching predictions, opset verified",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 50,
+      "type": "experiment",
+      "title": "Build complete submission run.py",
+      "hypothesis": null,
+      "description": "Write run.py that: (1) loads ONNX/PT models, (2) runs detection (with tiling if beneficial), (3) runs DINOv2 classification on crops, (4) applies confidence gating, (5) outputs predictions.json in correct format. Use only allowed imports (pathlib, json, no os/sys).",
+      "success_criteria": "run.py produces valid predictions.json, uses only allowed imports",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 51,
+      "type": "experiment",
+      "title": "End-to-end inference timing test",
+      "hypothesis": "Complete pipeline runs within 300s on val images (extrapolated to full test set)",
+      "description": "Time the complete run.py pipeline on val images. Extrapolate to full test set. If over budget, identify bottlenecks and optimize (reduce tiles, use smaller model, batch processing).",
+      "success_criteria": "Estimated total inference time < 300s for ~248 images",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 52,
+      "type": "experiment",
+      "title": "Submission size verification",
+      "hypothesis": null,
+      "description": "Package all submission files, verify total uncompressed size < 420MB, max 3 weight files. Check all file extensions are allowed (.py, .json, .yaml, .cfg, .pt, .onnx, .safetensors, .npy).",
+      "success_criteria": "Submission package meets all size and format constraints",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 53,
+      "type": "refactor",
+      "title": "Optimize inference pipeline for speed",
+      "hypothesis": "Batched DINOv2 inference and optimized crop extraction can reduce total time by 30%+",
+      "description": "Profile the inference pipeline. Batch DINOv2 crop processing instead of one-by-one. Use efficient image loading. Pre-allocate tensors. Minimize CPU-GPU transfers.",
+      "success_criteria": "Measurable inference speedup while maintaining val_score",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 54,
+      "type": "experiment",
+      "title": "Final configuration sweep",
+      "hypothesis": "Combining all best individual improvements yields the highest val_score",
+      "description": "Combine the best settings from all experiments: best model(s), best resolution, best tiling config, best DINOv2 variant, best kNN params, best thresholds, best gallery composition. Run full evaluation on val split.",
+      "success_criteria": "Final val_score is the highest achieved across all experiments",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 55,
+      "type": "refactor",
+      "title": "Clean up and document final configuration",
+      "hypothesis": null,
+      "description": "Document the final best configuration: model architecture, training hyperparameters, inference settings, val_score breakdown. Clean up code. Prepare clear instructions for human operator to retrain on full dataset.",
+      "success_criteria": "Complete documentation of best config with reproducible training commands",
+      "status": "pending",
+      "experiment_id": null
+    }
+  ]
+}
