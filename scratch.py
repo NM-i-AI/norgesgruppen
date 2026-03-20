@@ -18,13 +18,10 @@ def check_versions():
             print(f"GPU device: {torch.cuda.get_device_name()}")
     except ImportError as e:
         print(f"torch: NOT INSTALLED ({e})")
+        return False
     
-    # Check torchvision
-    try:
-        import torchvision
-        print(f"torchvision: {torchvision.__version__}")
-    except ImportError as e:
-        print(f"torchvision: NOT INSTALLED ({e})")
+    # Don't try to import torchvision yet if we know it's broken
+    print("Skipping torchvision import to avoid NMS operator error")
     
     # Check CUDA toolkit version if available
     try:
@@ -36,6 +33,36 @@ def check_versions():
                     break
     except Exception:
         print("CUDA toolkit: nvcc not found")
+    
+    return True
+
+def fix_torch_torchvision():
+    """Fix torch/torchvision compatibility by reinstalling in correct order"""
+    print("\n=== FIXING TORCH/TORCHVISION COMPATIBILITY ===")
+    
+    commands = [
+        # First, completely uninstall both
+        [sys.executable, '-m', 'pip', 'uninstall', 'torch', 'torchvision', 'torchaudio', '-y'],
+        # Install torch first with CUDA support
+        [sys.executable, '-m', 'pip', 'install', 'torch==2.6.0', '--index-url', 'https://download.pytorch.org/whl/cu124'],
+        # Then install torchvision
+        [sys.executable, '-m', 'pip', 'install', 'torchvision==0.21.0', '--index-url', 'https://download.pytorch.org/whl/cu124'],
+    ]
+    
+    for i, cmd in enumerate(commands, 1):
+        try:
+            print(f"\nStep {i}: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                print(f"Command failed: {result.stderr}")
+                return False
+            else:
+                print("Command succeeded")
+        except Exception as e:
+            print(f"Command error: {e}")
+            return False
+    
+    return True
 
 def test_nms_operator():
     """Test if torchvision.ops.nms works directly"""
@@ -79,68 +106,6 @@ def test_ultralytics_import():
         print(f"✗ ultralytics import failed: {e}")
         return False
 
-def try_fix_torch_versions():
-    """Try different approaches to fix torch/torchvision compatibility"""
-    print("\n=== ATTEMPTING FIXES ===")
-    
-    fixes = [
-        # Fix 1: Uninstall both and reinstall matching versions
-        {
-            'name': 'Uninstall and reinstall torch+torchvision',
-            'commands': [
-                [sys.executable, '-m', 'pip', 'uninstall', 'torch', 'torchvision', '-y'],
-                [sys.executable, '-m', 'pip', 'install', 'torch==2.6.0', 'torchvision==0.21.0', '--index-url', 'https://download.pytorch.org/whl/cu124']
-            ]
-        },
-        # Fix 2: Force reinstall with exact versions
-        {
-            'name': 'Force reinstall with exact versions',
-            'commands': [
-                [sys.executable, '-m', 'pip', 'install', 'torch==2.6.0', 'torchvision==0.21.0', '--force-reinstall', '--index-url', 'https://download.pytorch.org/whl/cu124']
-            ]
-        },
-        # Fix 3: Try CPU-only versions first
-        {
-            'name': 'Install CPU versions first',
-            'commands': [
-                [sys.executable, '-m', 'pip', 'uninstall', 'torch', 'torchvision', '-y'],
-                [sys.executable, '-m', 'pip', 'install', 'torch==2.6.0', 'torchvision==0.21.0']
-            ]
-        }
-    ]
-    
-    for i, fix in enumerate(fixes, 1):
-        print(f"\nTrying Fix {i}: {fix['name']}")
-        
-        success = True
-        for cmd in fix['commands']:
-            try:
-                print(f"Running: {' '.join(cmd)}")
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-                if result.returncode != 0:
-                    print(f"Command failed: {result.stderr}")
-                    success = False
-                    break
-                else:
-                    print("Command succeeded")
-            except Exception as e:
-                print(f"Command error: {e}")
-                success = False
-                break
-        
-        if success:
-            print(f"Fix {i} completed, testing...")
-            # Test if NMS works now
-            if test_nms_operator():
-                print(f"✓ Fix {i} successful!")
-                return True
-            else:
-                print(f"✗ Fix {i} didn't resolve the issue")
-        else:
-            print(f"✗ Fix {i} failed to execute")
-    
-    return False
-
 def test_minimal_yolo():
     """Test minimal YOLO inference to confirm everything works"""
     print("\n=== MINIMAL YOLO TEST ===")
@@ -174,38 +139,42 @@ def main():
     print("="*50)
     
     # Step 1: Check current versions
-    check_versions()
+    if not check_versions():
+        print("\n✗ Basic torch check failed")
+        return
     
-    # Step 2: Test NMS operator directly
+    # Step 2: Try to fix torch/torchvision compatibility
+    print("\nAttempting to fix torch/torchvision compatibility...")
+    if not fix_torch_torchvision():
+        print("\n✗ Failed to fix torch/torchvision")
+        return
+    
+    # Step 3: Test NMS operator after fix
     nms_works = test_nms_operator()
     
-    # Step 3: Test ultralytics import
+    # Step 4: Test ultralytics import
     ultralytics_works = test_ultralytics_import()
     
     if nms_works and ultralytics_works:
         print("\n✓ Everything appears to be working!")
         # Test minimal YOLO
         test_minimal_yolo()
+        print("\n✓ All tests passed! Ready for training.")
     else:
-        print("\n✗ Issues detected, attempting fixes...")
-        if try_fix_torch_versions():
-            print("\n✓ Fix successful! Testing ultralytics...")
-            if test_ultralytics_import():
-                test_minimal_yolo()
-        else:
-            print("\n✗ All fixes failed")
-            
-            # Final diagnostic info
-            print("\n=== FINAL DIAGNOSTIC INFO ===")
-            print("The issue is likely one of:")
-            print("1. torch/torchvision version mismatch")
-            print("2. CUDA version incompatibility")
-            print("3. Multiple torch installations conflicting")
-            print("4. Missing CUDA libraries")
-            
-            print("\nRecommended manual fix:")
-            print("pip uninstall torch torchvision -y")
-            print("pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124")
+        print("\n✗ Issues still detected after fix attempt")
+        
+        # Final diagnostic info
+        print("\n=== FINAL DIAGNOSTIC INFO ===")
+        print("The issue is likely one of:")
+        print("1. torch/torchvision version mismatch")
+        print("2. CUDA version incompatibility")
+        print("3. Multiple torch installations conflicting")
+        print("4. Missing CUDA libraries")
+        
+        print("\nRecommended manual fix:")
+        print("pip uninstall torch torchvision torchaudio -y")
+        print("pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124")
+        print("pip install torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124")
 
 if __name__ == "__main__":
     main()

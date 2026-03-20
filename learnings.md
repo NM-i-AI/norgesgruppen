@@ -72,3 +72,11 @@
 - Result: Installation failed due to pip being unable to uninstall pre-installed torch (no RECORD file), same NMS operator error persists
 - Side effects: None - installation never completed
 - Takeaway: The pre-installed torch cannot be uninstalled normally; need to use --force-reinstall --no-deps as suggested in the error message.
+
+## Experiment 5 — Diagnose torch/torchvision compatibility and find working setup
+- Status: EXPLORE
+- Hypothesis: The NMS operator error is caused by mismatched torch/torchvision versions; we need to find what's pre-installed and work with it
+- Change: Added comprehensive torch/torchvision compatibility diagnosis to scratch.py
+- Result: Found torch 2.6.0+cu124 installed but cannot uninstall due to missing RECORD file; torchvision import still causes NMS operator error
+- Side effects: Confirmed the environment has a non-standard torch installation that cannot be easily modified
+- Takeaway: The torch installation appears to be system-level or conda-managed and cannot be fixed with pip, requiring a different approach to resolve the NMS operator issue.
