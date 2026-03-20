@@ -3,184 +3,222 @@ import os
 from pathlib import Path
 from collections import Counter, defaultdict
 
-def explore_data():
-    print("=== NorgesGruppen Grocery Dataset Exploration ===")
+def validate_splits():
+    print("=== Split Validation ===\n")
     
-    # 1. Check images directory
-    images_dir = Path("data/train/images")
-    if images_dir.exists():
-        image_files = list(images_dir.glob("*.jpg")) + list(images_dir.glob("*.jpeg")) + list(images_dir.glob("*.png"))
-        print(f"\n1. Images: {len(image_files)} files in {images_dir}")
-        if image_files:
-            print(f"   Sample files: {[f.name for f in image_files[:3]]}")
-    else:
-        print(f"\n1. Images directory not found: {images_dir}")
-    
-    # 2. Examine annotations.json
+    # Load original annotations
     annotations_path = Path("data/train/annotations.json")
-    if annotations_path.exists():
-        with open(annotations_path, 'r') as f:
-            annotations = json.load(f)
-        
-        print(f"\n2. Annotations structure:")
-        print(f"   Keys: {list(annotations.keys())}")
-        
-        if 'images' in annotations:
-            print(f"   Images: {len(annotations['images'])} entries")
-            if annotations['images']:
-                sample_img = annotations['images'][0]
-                print(f"   Sample image entry: {sample_img}")
-                
-                # Check image dimensions
-                widths = [img['width'] for img in annotations['images']]
-                heights = [img['height'] for img in annotations['images']]
-                print(f"   Image dimensions - Width: {min(widths)}-{max(widths)} (avg: {sum(widths)/len(widths):.0f})")
-                print(f"                    - Height: {min(heights)}-{max(heights)} (avg: {sum(heights)/len(heights):.0f})")
-        
-        if 'categories' in annotations:
-            print(f"   Categories: {len(annotations['categories'])} entries")
-            if annotations['categories']:
-                print(f"   Category ID range: {min(cat['id'] for cat in annotations['categories'])}-{max(cat['id'] for cat in annotations['categories'])}")
-                print(f"   Sample categories: {[(cat['id'], cat['name']) for cat in annotations['categories'][:5]]}")
-        
-        if 'annotations' in annotations:
-            print(f"   Annotations: {len(annotations['annotations'])} entries")
-            if annotations['annotations']:
-                sample_ann = annotations['annotations'][0]
-                print(f"   Sample annotation: {sample_ann}")
-                
-                # Annotations per image
-                img_ann_count = Counter(ann['image_id'] for ann in annotations['annotations'])
-                ann_counts = list(img_ann_count.values())
-                print(f"   Annotations per image: {min(ann_counts)}-{max(ann_counts)} (avg: {sum(ann_counts)/len(ann_counts):.1f})")
-                
-                # Category frequency
-                cat_freq = Counter(ann['category_id'] for ann in annotations['annotations'])
-                print(f"   Most frequent categories: {cat_freq.most_common(10)}")
-                print(f"   Least frequent categories: {cat_freq.most_common()[-10:]}")
-                
-                # Check for 'corrected' field
-                corrected_count = sum(1 for ann in annotations['annotations'] if ann.get('corrected', False))
-                print(f"   Corrected annotations: {corrected_count}/{len(annotations['annotations'])} ({100*corrected_count/len(annotations['annotations']):.1f}%)")
-    else:
-        print(f"\n2. Annotations file not found: {annotations_path}")
+    if not annotations_path.exists():
+        print(f"ERROR: Original annotations not found at {annotations_path}")
+        return False
     
-    # 3. Check for existing splits
+    with open(annotations_path, 'r') as f:
+        original_data = json.load(f)
+    
+    print(f"Original dataset: {len(original_data['images'])} images, {len(original_data['annotations'])} annotations")
+    
+    # Load splits
     train_split_path = Path("data/train_split.json")
     val_split_path = Path("data/val_split.json")
     
-    print(f"\n3. Existing splits:")
-    if train_split_path.exists():
-        with open(train_split_path, 'r') as f:
-            train_split = json.load(f)
-        print(f"   Train split: {len(train_split.get('images', []))} images, {len(train_split.get('annotations', []))} annotations")
-    else:
-        print(f"   Train split not found: {train_split_path}")
+    if not train_split_path.exists():
+        print(f"ERROR: Train split not found at {train_split_path}")
+        return False
     
-    if val_split_path.exists():
-        with open(val_split_path, 'r') as f:
-            val_split = json.load(f)
-        print(f"   Val split: {len(val_split.get('images', []))} images, {len(val_split.get('annotations', []))} annotations")
-    else:
-        print(f"   Val split not found: {val_split_path}")
+    if not val_split_path.exists():
+        print(f"ERROR: Val split not found at {val_split_path}")
+        return False
     
-    # 4. Examine metadata.json
-    metadata_path = Path("data/metadata.json")
-    if metadata_path.exists():
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
-        print(f"\n4. Metadata structure:")
-        print(f"   Keys: {list(metadata.keys())}")
-        
-        if isinstance(metadata, dict):
-            sample_keys = list(metadata.keys())[:3]
-            for key in sample_keys:
-                print(f"   Sample entry '{key}': {metadata[key]}")
-            
-            # Count products with different image types
-            if sample_keys:
-                image_types = set()
-                for product_data in metadata.values():
-                    if isinstance(product_data, dict) and 'available_images' in product_data:
-                        image_types.update(product_data['available_images'])
-                print(f"   Available image types: {sorted(image_types)}")
-    else:
-        print(f"\n4. Metadata file not found: {metadata_path}")
+    with open(train_split_path, 'r') as f:
+        train_split = json.load(f)
     
-    # 5. Examine products directory
-    products_dir = Path("data/products")
-    if products_dir.exists():
-        product_dirs = [d for d in products_dir.iterdir() if d.is_dir()]
-        print(f"\n5. Products directory: {len(product_dirs)} product folders")
-        
-        if product_dirs:
-            # Sample a few product directories
-            sample_products = product_dirs[:3]
-            for prod_dir in sample_products:
-                image_files = list(prod_dir.glob("*.jpg")) + list(prod_dir.glob("*.jpeg")) + list(prod_dir.glob("*.png"))
-                print(f"   {prod_dir.name}: {len(image_files)} images - {[f.name for f in image_files]}")
-            
-            # Count total reference images
-            total_ref_images = 0
-            image_type_counts = Counter()
-            for prod_dir in product_dirs:
-                for img_file in prod_dir.glob("*.jpg"):
-                    total_ref_images += 1
-                    image_type_counts[img_file.stem] += 1
-                for img_file in prod_dir.glob("*.jpeg"):
-                    total_ref_images += 1
-                    image_type_counts[img_file.stem] += 1
-                for img_file in prod_dir.glob("*.png"):
-                    total_ref_images += 1
-                    image_type_counts[img_file.stem] += 1
-            
-            print(f"   Total reference images: {total_ref_images}")
-            print(f"   Image type distribution: {dict(image_type_counts.most_common())}")
-    else:
-        print(f"\n5. Products directory not found: {products_dir}")
+    with open(val_split_path, 'r') as f:
+        val_split = json.load(f)
     
-    # 6. Check for store sections in image metadata
-    if annotations_path.exists():
-        with open(annotations_path, 'r') as f:
-            annotations = json.load(f)
+    print(f"Train split: {len(train_split['images'])} images, {len(train_split['annotations'])} annotations")
+    print(f"Val split: {len(val_split['images'])} images, {len(val_split['annotations'])} annotations")
+    
+    # Validate COCO format
+    required_keys = ['images', 'annotations', 'categories']
+    for split_name, split_data in [("train", train_split), ("val", val_split)]:
+        for key in required_keys:
+            if key not in split_data:
+                print(f"ERROR: {split_name} split missing required key: {key}")
+                return False
+        print(f"✓ {split_name} split has valid COCO format")
+    
+    # Check for overlap between train and val image IDs
+    train_image_ids = set(img['id'] for img in train_split['images'])
+    val_image_ids = set(img['id'] for img in val_split['images'])
+    
+    overlap = train_image_ids.intersection(val_image_ids)
+    if overlap:
+        print(f"ERROR: Found {len(overlap)} overlapping image IDs between train and val: {list(overlap)[:5]}...")
+        return False
+    else:
+        print("✓ No overlap between train and val image IDs")
+    
+    # Check total counts match original
+    total_images = len(train_split['images']) + len(val_split['images'])
+    total_annotations = len(train_split['annotations']) + len(val_split['annotations'])
+    
+    if total_images != len(original_data['images']):
+        print(f"ERROR: Image count mismatch. Original: {len(original_data['images'])}, Split total: {total_images}")
+        return False
+    
+    if total_annotations != len(original_data['annotations']):
+        print(f"ERROR: Annotation count mismatch. Original: {len(original_data['annotations'])}, Split total: {total_annotations}")
+        return False
+    
+    print("✓ Total counts match original dataset")
+    
+    # Check split ratio
+    val_ratio = len(val_split['images']) / len(original_data['images'])
+    print(f"Val split ratio: {val_ratio:.1%} ({len(val_split['images'])}/{len(original_data['images'])} images)")
+    
+    if abs(val_ratio - 0.1) > 0.02:  # Allow 2% tolerance
+        print(f"WARNING: Val split ratio {val_ratio:.1%} is not close to target 10%")
+    else:
+        print("✓ Val split ratio is close to target 10%")
+    
+    # Check category distribution
+    train_cats = Counter(ann['category_id'] for ann in train_split['annotations'])
+    val_cats = Counter(ann['category_id'] for ann in val_split['annotations'])
+    
+    train_unique_cats = set(train_cats.keys())
+    val_unique_cats = set(val_cats.keys())
+    
+    print(f"\nCategory distribution:")
+    print(f"Train: {len(train_unique_cats)} unique categories")
+    print(f"Val: {len(val_unique_cats)} unique categories")
+    
+    missing_in_val = train_unique_cats - val_unique_cats
+    missing_in_train = val_unique_cats - train_unique_cats
+    
+    if missing_in_val:
+        print(f"Categories in train but not val: {len(missing_in_val)} (e.g., {list(missing_in_val)[:5]})")
+    
+    if missing_in_train:
+        print(f"Categories in val but not train: {len(missing_in_train)} (e.g., {list(missing_in_train)[:5]})")
+    
+    print("\n✓ Split validation completed successfully")
+    return True
+
+def check_environment():
+    print("\n=== Environment Check ===\n")
+    
+    # Check GPU availability
+    try:
+        import torch
+        print(f"PyTorch version: {torch.__version__}")
+        print(f"CUDA available: {torch.cuda.is_available()}")
         
-        print(f"\n6. Store sections analysis:")
-        if 'images' in annotations and annotations['images']:
-            # Look for section information in image metadata
-            sections = set()
-            for img in annotations['images']:
-                if 'section' in img:
-                    sections.add(img['section'])
-                # Also check filename patterns
-                filename = img.get('file_name', '')
-                for section in ['Egg', 'Frokost', 'Knekkebrod', 'Varmedrikker']:
-                    if section.lower() in filename.lower():
-                        sections.add(section)
+        if torch.cuda.is_available():
+            print(f"CUDA version: {torch.version.cuda}")
+            print(f"GPU count: {torch.cuda.device_count()}")
             
-            if sections:
-                print(f"   Found sections: {sorted(sections)}")
+            for i in range(torch.cuda.device_count()):
+                gpu_name = torch.cuda.get_device_name(i)
+                gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+                print(f"GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
                 
-                # Count images per section
-                section_counts = Counter()
-                for img in annotations['images']:
-                    img_section = img.get('section')
-                    if not img_section:
-                        filename = img.get('file_name', '')
-                        for section in ['Egg', 'Frokost', 'Knekkebrod', 'Varmedrikker']:
-                            if section.lower() in filename.lower():
-                                img_section = section
-                                break
-                    if img_section:
-                        section_counts[img_section] += 1
-                
-                print(f"   Images per section: {dict(section_counts)}")
-            else:
-                print(f"   No explicit section information found in image metadata")
-                print(f"   Sample filenames: {[img['file_name'] for img in annotations['images'][:5]]}")
+                # Check available memory
+                torch.cuda.empty_cache()
+                allocated = torch.cuda.memory_allocated(i) / 1024**3
+                reserved = torch.cuda.memory_reserved(i) / 1024**3
+                print(f"  Memory - Allocated: {allocated:.1f} GB, Reserved: {reserved:.1f} GB")
+        else:
+            print("WARNING: No CUDA GPUs available")
+    except ImportError:
+        print("ERROR: PyTorch not available")
+        return False
+    
+    # Check required packages
+    required_packages = {
+        'ultralytics': '8.1.0',
+        'torchvision': None,
+        'timm': '0.9.12',
+        'pycocotools': None,
+        'numpy': None,
+        'scipy': None,
+        'scikit-learn': None
+    }
+    
+    print("\nPackage versions:")
+    missing_packages = []
+    
+    for package, expected_version in required_packages.items():
+        try:
+            if package == 'ultralytics':
+                import ultralytics
+                version = ultralytics.__version__
+            elif package == 'torchvision':
+                import torchvision
+                version = torchvision.__version__
+            elif package == 'timm':
+                import timm
+                version = timm.__version__
+            elif package == 'pycocotools':
+                import pycocotools
+                version = getattr(pycocotools, '__version__', 'unknown')
+            elif package == 'numpy':
+                import numpy
+                version = numpy.__version__
+            elif package == 'scipy':
+                import scipy
+                version = scipy.__version__
+            elif package == 'scikit-learn':
+                import sklearn
+                version = sklearn.__version__
+            
+            status = "✓"
+            if expected_version and version != expected_version:
+                status = f"⚠ (expected {expected_version})"
+            
+            print(f"  {package}: {version} {status}")
+            
+        except ImportError:
+            print(f"  {package}: NOT INSTALLED ❌")
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print(f"\nERROR: Missing packages: {missing_packages}")
+        return False
+    
+    # Test ultralytics import specifically
+    try:
+        from ultralytics import YOLO
+        print("\n✓ Ultralytics YOLO import successful")
+    except ImportError as e:
+        print(f"\nERROR: Cannot import YOLO from ultralytics: {e}")
+        return False
+    
+    # Test pycocotools
+    try:
+        from pycocotools.coco import COCO
+        from pycocotools.cocoeval import COCOeval
+        print("✓ pycocotools import successful")
+    except ImportError as e:
+        print(f"ERROR: Cannot import from pycocotools: {e}")
+        return False
+    
+    print("\n✓ Environment check completed successfully")
+    return True
 
 def main():
-    explore_data()
+    print("=== Step 2: Validate Splits and Check Environment ===\n")
+    
+    splits_valid = validate_splits()
+    env_ready = check_environment()
+    
+    print(f"\n=== Summary ===\n")
+    print(f"Splits valid: {'✓' if splits_valid else '❌'}")
+    print(f"Environment ready: {'✓' if env_ready else '❌'}")
+    
+    if splits_valid and env_ready:
+        print("\n🎉 Ready to proceed with experiments!")
+    else:
+        print("\n⚠ Issues found that need to be resolved before proceeding")
 
 if __name__ == "__main__":
     main()
