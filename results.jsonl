@@ -1,1 +1,2 @@
 {"experiment_id": "exp-001", "step": 1, "type": "exploration", "title": "Verify environment and package versions", "status": "EXPLORE", "metrics": {}, "duration_seconds": 0.3, "timestamp": "2026-03-20T23:18:40.034215+00:00", "fix_attempts": 1}
+{"experiment_id": "exp-002", "step": 2, "type": "exploration", "title": "Explore dataset structure, annotations, and package availability", "status": "EXPLORE", "metrics": {}, "duration_seconds": 0.1, "timestamp": "2026-03-20T23:20:57.317247+00:00", "fix_attempts": 1}
