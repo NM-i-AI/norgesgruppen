@@ -32,3 +32,11 @@
 - Result: YOLO conversion succeeded (248 images converted), but evaluation function failed due to missing pycocotools dependency
 - Side effects: None observed
 - Takeaway: Need to install pycocotools dependency before the evaluation function can work, but YOLO dataset conversion is ready for training.
+
+## Experiment 5 — YOLOv8m baseline with nc=356 at imgsz=1280
+- Status: FAILED
+- Hypothesis: YOLOv8m at 1280 is a good balance of speed and accuracy for 356-class detection on dense shelf images
+- Change: Implemented YOLOv8m baseline training pipeline with nc=356 classes at imgsz=1280
+- Result: Training failed due to missing ultralytics package (training_success=0.0)
+- Side effects: None - experiment did not execute
+- Takeaway: The ultralytics package needs to be installed before any YOLO experiments can proceed.

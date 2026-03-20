@@ -4,115 +4,213 @@ from pathlib import Path
 from collections import Counter, defaultdict
 from utils import evaluate_predictions, convert_coco_to_yolo
 
-def test_evaluation_function():
-    """Test the evaluation function with dummy predictions"""
-    print("=== Testing Evaluation Function ===")
+def train_yolov8m_baseline():
+    """Train YOLOv8m baseline with nc=356 at imgsz=1280"""
+    print("=== Training YOLOv8m Baseline ===")
     
-    # Load val split to get ground truth
-    val_split_path = Path("data/val_split.json")
-    if not val_split_path.exists():
-        print(f"❌ Val split not found at {val_split_path}")
-        return False
-    
-    with open(val_split_path, 'r') as f:
-        val_split = json.load(f)
-    
-    print(f"Val split: {len(val_split['images'])} images, {len(val_split['annotations'])} annotations")
-    
-    # Create dummy predictions - mix of correct and incorrect
-    dummy_predictions = []
-    
-    for i, ann in enumerate(val_split['annotations'][:50]):  # Test with first 50 annotations
-        # Create a prediction that's close to the ground truth
-        bbox = ann['bbox'].copy()
-        
-        # Add some noise to bbox
-        bbox[0] += random.uniform(-5, 5)  # x offset
-        bbox[1] += random.uniform(-5, 5)  # y offset
-        bbox[2] *= random.uniform(0.9, 1.1)  # width scale
-        bbox[3] *= random.uniform(0.9, 1.1)  # height scale
-        
-        # Sometimes use correct category, sometimes wrong
-        if i % 3 == 0:  # 1/3 correct classifications
-            category_id = ann['category_id']
-        else:  # 2/3 wrong classifications
-            category_id = random.randint(0, 356)
-        
-        dummy_predictions.append({
-            'image_id': ann['image_id'],
-            'category_id': category_id,
-            'bbox': bbox,
-            'score': random.uniform(0.5, 0.95)
-        })
-    
-    print(f"Created {len(dummy_predictions)} dummy predictions")
-    
-    # Test evaluation
     try:
-        val_score, det_map, cls_map = evaluate_predictions(dummy_predictions, val_split)
-        print(f"✓ Evaluation successful:")
-        print(f"  Detection mAP@0.5: {det_map:.4f}")
-        print(f"  Classification mAP@0.5: {cls_map:.4f}")
-        print(f"  Combined val_score: {val_score:.4f}")
-        return True
-    except Exception as e:
-        print(f"❌ Evaluation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-def test_yolo_conversion():
-    """Test COCO to YOLO format conversion"""
-    print("\n=== Testing YOLO Conversion ===")
+        from ultralytics import YOLO
+        import torch
+    except ImportError as e:
+        print(f"❌ Required packages not available: {e}")
+        return None, None, None
     
-    # Check if splits exist
-    train_split_path = Path("data/train_split.json")
-    val_split_path = Path("data/val_split.json")
-    
-    if not train_split_path.exists() or not val_split_path.exists():
-        print("❌ Train/val splits not found")
-        return False
-    
-    # Convert to YOLO format
-    try:
+    # Check if YOLO dataset exists
+    data_yaml_path = Path("data/data.yaml")
+    if not data_yaml_path.exists():
+        print("❌ YOLO dataset not found. Creating...")
+        # Ensure splits exist and convert to YOLO format
+        if not Path("data/train_split.json").exists():
+            print("❌ Train split not found")
+            return None, None, None
+        
         train_success = convert_coco_to_yolo(
-            coco_json_path=train_split_path,
+            coco_json_path=Path("data/train_split.json"),
             images_dir=Path("data/train/images"),
             output_dir=Path("data/yolo_train"),
             split_name="train"
         )
         
         val_success = convert_coco_to_yolo(
-            coco_json_path=val_split_path,
+            coco_json_path=Path("data/val_split.json"),
             images_dir=Path("data/train/images"),
             output_dir=Path("data/yolo_val"),
             split_name="val"
         )
         
-        if train_success and val_success:
-            print("✓ YOLO conversion successful")
-            
-            # Check output structure
-            train_dir = Path("data/yolo_train")
-            val_dir = Path("data/yolo_val")
-            data_yaml = Path("data/data.yaml")
-            
-            print(f"  Train images: {len(list(train_dir.glob('*.jpg')))}")
-            print(f"  Train labels: {len(list(train_dir.glob('*.txt')))}")
-            print(f"  Val images: {len(list(val_dir.glob('*.jpg')))}")
-            print(f"  Val labels: {len(list(val_dir.glob('*.txt')))}")
-            print(f"  Data YAML exists: {data_yaml.exists()}")
-            
-            return True
-        else:
-            print("❌ YOLO conversion failed")
-            return False
-            
+        if not (train_success and val_success):
+            print("❌ Failed to create YOLO dataset")
+            return None, None, None
+    
+    print(f"✓ Using YOLO dataset at {data_yaml_path}")
+    
+    # Initialize YOLOv8m model
+    print("Initializing YOLOv8m model...")
+    model = YOLO('yolov8m.pt')  # Load pretrained weights
+    
+    # Check GPU availability
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    
+    # Training parameters
+    train_params = {
+        'data': str(data_yaml_path),
+        'epochs': 100,
+        'imgsz': 1280,
+        'batch': -1,  # Auto batch size
+        'device': device,
+        'project': 'runs/detect',
+        'name': 'yolov8m_baseline',
+        'save': True,
+        'save_period': 25,  # Save checkpoint every 25 epochs
+        'patience': 20,  # Early stopping patience
+        'verbose': True,
+        'seed': 42,
+        # Default augmentation settings
+        'hsv_h': 0.015,
+        'hsv_s': 0.7,
+        'hsv_v': 0.4,
+        'degrees': 0.0,
+        'translate': 0.1,
+        'scale': 0.5,
+        'shear': 0.0,
+        'perspective': 0.0,
+        'flipud': 0.0,
+        'fliplr': 0.5,
+        'mosaic': 1.0,
+        'mixup': 0.0,
+        'copy_paste': 0.0,
+        'close_mosaic': 50  # Close mosaic augmentation at epoch 50
+    }
+    
+    print(f"Training parameters:")
+    for key, value in train_params.items():
+        print(f"  {key}: {value}")
+    
+    # Train the model
+    print("\nStarting training...")
+    try:
+        results = model.train(**train_params)
+        print("✓ Training completed successfully")
+        
+        # Get best model path
+        best_model_path = Path(results.save_dir) / 'weights' / 'best.pt'
+        print(f"Best model saved at: {best_model_path}")
+        
+        return results, best_model_path, model
+        
     except Exception as e:
-        print(f"❌ YOLO conversion error: {e}")
+        print(f"❌ Training failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return None, None, None
+
+def evaluate_yolo_model(model_path: Path):
+    """Evaluate trained YOLO model on validation split"""
+    print(f"\n=== Evaluating Model: {model_path} ===")
+    
+    try:
+        from ultralytics import YOLO
+        import torch
+    except ImportError as e:
+        print(f"❌ Required packages not available: {e}")
+        return None, None, None
+    
+    # Load validation split
+    val_split_path = Path("data/val_split.json")
+    if not val_split_path.exists():
+        print(f"❌ Validation split not found at {val_split_path}")
+        return None, None, None
+    
+    with open(val_split_path, 'r') as f:
+        val_split = json.load(f)
+    
+    print(f"Validation split: {len(val_split['images'])} images, {len(val_split['annotations'])} annotations")
+    
+    # Load trained model
+    model = YOLO(str(model_path))
+    
+    # Run inference on validation images
+    val_images_dir = Path("data/yolo_val")
+    val_image_files = list(val_images_dir.glob("*.jpg"))
+    
+    if not val_image_files:
+        print(f"❌ No validation images found in {val_images_dir}")
+        return None, None, None
+    
+    print(f"Running inference on {len(val_image_files)} validation images...")
+    
+    # Collect predictions
+    predictions = []
+    
+    for img_path in val_image_files:
+        # Extract image_id from filename (e.g., "img_00042.jpg" -> 42)
+        filename = img_path.name
+        try:
+            # Handle different filename formats
+            if filename.startswith('img_'):
+                image_id = int(filename.split('_')[1].split('.')[0])
+            else:
+                # Fallback: use the number in filename
+                import re
+                numbers = re.findall(r'\d+', filename)
+                if numbers:
+                    image_id = int(numbers[0])
+                else:
+                    print(f"Warning: Could not extract image_id from {filename}")
+                    continue
+        except (ValueError, IndexError):
+            print(f"Warning: Could not parse image_id from {filename}")
+            continue
+        
+        # Run inference
+        results = model(str(img_path), verbose=False)
+        
+        # Extract predictions
+        for result in results:
+            if result.boxes is not None:
+                boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
+                scores = result.boxes.conf.cpu().numpy()
+                classes = result.boxes.cls.cpu().numpy().astype(int)
+                
+                for box, score, cls in zip(boxes, scores, classes):
+                    # Convert from x1,y1,x2,y2 to x,y,w,h (COCO format)
+                    x1, y1, x2, y2 = box
+                    x, y, w, h = x1, y1, x2 - x1, y2 - y1
+                    
+                    predictions.append({
+                        'image_id': image_id,
+                        'category_id': int(cls),
+                        'bbox': [float(x), float(y), float(w), float(h)],
+                        'score': float(score)
+                    })
+    
+    print(f"Generated {len(predictions)} predictions")
+    
+    if not predictions:
+        print("❌ No predictions generated")
+        return 0.0, 0.0, 0.0
+    
+    # Evaluate using our custom evaluation function
+    try:
+        val_score, det_map, cls_map = evaluate_predictions(predictions, val_split)
+        
+        print(f"\n=== Evaluation Results ===")
+        print(f"Detection mAP@0.5: {det_map:.4f}")
+        print(f"Classification mAP@0.5: {cls_map:.4f}")
+        print(f"Combined val_score: {val_score:.4f}")
+        
+        return val_score, det_map, cls_map
+        
+    except Exception as e:
+        print(f"❌ Evaluation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None, None
 
 def create_train_val_splits():
     """Create 90/10 train/val splits stratified by image with seed=42"""
@@ -187,134 +285,11 @@ def create_train_val_splits():
     print(f"Saved train split to {train_split_path}")
     print(f"Saved val split to {val_split_path}")
     
-    # Print category distribution stats
-    train_cats = Counter(ann['category_id'] for ann in train_annotations)
-    val_cats = Counter(ann['category_id'] for ann in val_annotations)
-    
-    print(f"\nCategory distribution:")
-    print(f"Train: {len(train_cats)} unique categories")
-    print(f"Val: {len(val_cats)} unique categories")
-    
-    # Categories only in train or val
-    train_only = set(train_cats.keys()) - set(val_cats.keys())
-    val_only = set(val_cats.keys()) - set(train_cats.keys())
-    
-    if train_only:
-        print(f"Categories only in train: {len(train_only)}")
-    if val_only:
-        print(f"Categories only in val: {len(val_only)}")
-    
-    return True
-
-def check_environment():
-    """Check PyTorch, CUDA, and required packages"""
-    print("\n=== Environment Check ===")
-    
-    # Check PyTorch
-    try:
-        import torch
-        print(f"✓ PyTorch version: {torch.__version__}")
-        print(f"✓ CUDA available: {torch.cuda.is_available()}")
-        
-        if torch.cuda.is_available():
-            print(f"✓ CUDA version: {torch.version.cuda}")
-            print(f"✓ GPU count: {torch.cuda.device_count()}")
-            
-            for i in range(torch.cuda.device_count()):
-                gpu_name = torch.cuda.get_device_name(i)
-                gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
-                print(f"  GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
-        
-        torch_ok = True
-    except ImportError:
-        print("❌ PyTorch not available")
-        torch_ok = False
-    
-    # Check ultralytics
-    try:
-        import ultralytics
-        from ultralytics import YOLO
-        print(f"✓ Ultralytics version: {ultralytics.__version__}")
-        ultralytics_ok = True
-    except ImportError:
-        print("❌ Ultralytics not available")
-        ultralytics_ok = False
-    
-    # Check pycocotools
-    try:
-        from pycocotools.coco import COCO
-        from pycocotools.cocoeval import COCOeval
-        print("✓ pycocotools available")
-        coco_ok = True
-    except ImportError:
-        print("❌ pycocotools not available")
-        coco_ok = False
-    
-    # Check other packages
-    other_packages = ['numpy', 'scipy', 'scikit-learn', 'timm']
-    other_ok = True
-    
-    for pkg in other_packages:
-        try:
-            __import__(pkg)
-            print(f"✓ {pkg} available")
-        except ImportError:
-            print(f"❌ {pkg} not available")
-            other_ok = False
-    
-    all_ok = torch_ok and ultralytics_ok and coco_ok and other_ok
-    return all_ok
-
-def validate_splits():
-    """Validate the created splits"""
-    print("\n=== Split Validation ===")
-    
-    # Check if split files exist
-    train_split_path = Path("data/train_split.json")
-    val_split_path = Path("data/val_split.json")
-    
-    if not train_split_path.exists():
-        print(f"❌ Train split not found at {train_split_path}")
-        return False
-    
-    if not val_split_path.exists():
-        print(f"❌ Val split not found at {val_split_path}")
-        return False
-    
-    # Load splits
-    with open(train_split_path, 'r') as f:
-        train_split = json.load(f)
-    
-    with open(val_split_path, 'r') as f:
-        val_split = json.load(f)
-    
-    # Check COCO format
-    required_keys = ['images', 'annotations', 'categories']
-    for split_name, split_data in [("train", train_split), ("val", val_split)]:
-        for key in required_keys:
-            if key not in split_data:
-                print(f"❌ {split_name} split missing key: {key}")
-                return False
-    
-    # Check for overlap
-    train_image_ids = set(img['id'] for img in train_split['images'])
-    val_image_ids = set(img['id'] for img in val_split['images'])
-    
-    overlap = train_image_ids.intersection(val_image_ids)
-    if overlap:
-        print(f"❌ Found {len(overlap)} overlapping image IDs")
-        return False
-    
-    print(f"✓ Train: {len(train_split['images'])} images, {len(train_split['annotations'])} annotations")
-    print(f"✓ Val: {len(val_split['images'])} images, {len(val_split['annotations'])} annotations")
-    print("✓ No overlap between splits")
-    print("✓ Valid COCO format")
-    
     return True
 
 def main():
-    """Main experiment: Build evaluation function and YOLO dataset conversion"""
-    print("=== Step 4: Build Evaluation Function and YOLO Dataset Conversion ===")
+    """Main experiment: Train YOLOv8m baseline"""
+    print("=== Step 5: YOLOv8m Baseline Training ===")
     
     # Ensure splits exist
     if not Path("data/train_split.json").exists():
@@ -324,36 +299,43 @@ def main():
             print("❌ Failed to create splits")
             return
     
-    # Test evaluation function
-    eval_success = test_evaluation_function()
+    # Train YOLOv8m baseline
+    results, best_model_path, model = train_yolov8m_baseline()
     
-    # Test YOLO conversion
-    yolo_success = test_yolo_conversion()
+    if results is None:
+        print("❌ Training failed")
+        print("METRIC:training_success=0")
+        return
     
-    # Print summary
-    print("\n=== Summary ===")
-    print(f"Evaluation function: {'✓' if eval_success else '❌'}")
-    print(f"YOLO conversion: {'✓' if yolo_success else '❌'}")
+    print("✓ Training completed successfully")
+    print("METRIC:training_success=1")
     
-    # Metrics for tracking
-    print(f"METRIC:eval_function_works={1 if eval_success else 0}")
-    print(f"METRIC:yolo_conversion_works={1 if yolo_success else 0}")
-    
-    if eval_success and yolo_success:
-        print("\n🎉 Ready for YOLO training experiments!")
+    # Evaluate the trained model
+    if best_model_path and best_model_path.exists():
+        val_score, det_map, cls_map = evaluate_yolo_model(best_model_path)
         
-        # Check YOLO dataset structure
-        train_images = len(list(Path("data/yolo_train").glob("*.jpg")))
-        train_labels = len(list(Path("data/yolo_train").glob("*.txt")))
-        val_images = len(list(Path("data/yolo_val").glob("*.jpg")))
-        val_labels = len(list(Path("data/yolo_val").glob("*.txt")))
-        
-        print(f"METRIC:train_images_yolo={train_images}")
-        print(f"METRIC:train_labels_yolo={train_labels}")
-        print(f"METRIC:val_images_yolo={val_images}")
-        print(f"METRIC:val_labels_yolo={val_labels}")
+        if val_score is not None:
+            print(f"\n=== Final Results ===")
+            print(f"METRIC:val_score={val_score:.4f}")
+            print(f"METRIC:detection_map={det_map:.4f}")
+            print(f"METRIC:classification_map={cls_map:.4f}")
+            print(f"METRIC:model_size=yolov8m")
+            print(f"METRIC:image_size=1280")
+            print(f"METRIC:epochs=100")
+            
+            # Training metrics from results
+            if hasattr(results, 'results_dict'):
+                train_metrics = results.results_dict
+                if 'metrics/mAP50(B)' in train_metrics:
+                    print(f"METRIC:train_map50={train_metrics['metrics/mAP50(B)']:.4f}")
+            
+            print(f"\n🎉 YOLOv8m baseline complete! val_score = {val_score:.4f}")
+        else:
+            print("❌ Evaluation failed")
+            print("METRIC:evaluation_success=0")
     else:
-        print("\n⚠ Issues found - check logs above")
+        print("❌ Best model not found")
+        print("METRIC:model_saved=0")
 
 if __name__ == "__main__":
     main()
