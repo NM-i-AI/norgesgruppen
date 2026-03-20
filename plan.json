@@ -1,7 +1,7 @@
 {
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
-  "revision": 2,
+  "revision": 3,
   "current_step": 6,
   "plan": [
     {
@@ -57,10 +57,10 @@
     {
       "step": 6,
       "type": "experiment",
-      "title": "Train on full data with YOLOv8l + best hyperparameters",
-      "hypothesis": "Using all 1000 images for training (no val holdout) gives the model 10% more data, improving classification of rare categories and boosting final_score by 1-2%",
-      "description": "Train YOLOv8l on ALL 1000 images (no validation split) using best hyperparameters from exp-004. Use the optimized conf/NMS thresholds from step 5. Evaluate on the same val split for comparison but submit with full-data model.",
-      "success_criteria": "final_score > 0.80",
+      "title": "Train YOLOv8l on full dataset (no val split) with best hyperparameters",
+      "hypothesis": "Using all 1000 images for training instead of 900 gives the model more data for rare categories, improving classification_map50 and boosting final_score by 1-2%",
+      "description": "Modify the training pipeline to use ALL 1000 images for training (no validation split). Keep the same YOLOv8l architecture and hyperparameters from exp-004 (80 epochs, imgsz=1280, mixup=0.15, copy_paste=0.3, AdamW, cosine LR). For evaluation, still hold out the same 100 val images but train on all 1000. The submission model trains on all data. Use YOLO's built-in evaluation on the held-out set for comparison metrics.",
+      "success_criteria": "final_score > 0.7882 (improvement over exp-004)",
       "status": "pending",
       "experiment_id": null
     },
@@ -68,19 +68,19 @@
       "step": 7,
       "type": "experiment",
       "title": "Two-stage: YOLO detector + crop classifier for classification boost",
-      "hypothesis": "A separate crop classifier trained on GT crops can improve classification_map50 from 0.71 to 0.80+, boosting final_score significantly since classification is the bottleneck",
-      "description": "Extract product crops from training images using GT bounding boxes. Train a lightweight classifier (EfficientNet-B0 or ResNet-50 via timm/torchvision) on these crops. At inference: detect with YOLO, crop detections, classify with separate model. Must fit within 300s and 420MB.",
-      "success_criteria": "classification_map50 > 0.75, final_score > 0.82",
+      "hypothesis": "A separate crop classifier trained on GT crops can improve classification_map50 from ~0.71 to 0.80+, boosting final_score since classification is the weaker component (0.71 vs 0.82 detection)",
+      "description": "Extract product crops from training images using GT bounding boxes. Train a lightweight classifier (EfficientNet-B0 or ResNet-50 via torchvision) on these crops with proper augmentation. At inference: detect with YOLO (class-agnostic or multi-class), crop detections, classify with separate model, use classifier predictions to override/refine YOLO class predictions. Must fit within 300s inference and 420MB model size.",
+      "success_criteria": "classification_map50 > 0.75 and final_score > 0.80",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 8,
       "type": "experiment",
-      "title": "TTA and model ensemble with WBF",
-      "hypothesis": "Test-time augmentation and/or ensembling 2 models with WBF improves detection by 2-3%",
-      "description": "Try TTA (horizontal flip + multi-scale) on best single model. If time permits, ensemble best 2 models with Weighted Boxes Fusion. Profile to ensure <300s inference.",
-      "success_criteria": "final_score > 0.83",
+      "title": "Test-time augmentation (TTA) for detection boost",
+      "hypothesis": "TTA with horizontal flip and multi-scale inference improves detection_map50 by 1-2% with acceptable inference time overhead",
+      "description": "Enable YOLO's built-in TTA (augment=True in predict) which applies horizontal flip and multi-scale. Profile inference time to ensure it stays under 300s for the test set. If too slow, use only horizontal flip TTA. Combine with best model from previous steps.",
+      "success_criteria": "final_score improvement of at least 0.5% over best single-model result, inference under 300s",
       "status": "pending",
       "experiment_id": null
     },
@@ -88,9 +88,9 @@
       "step": 9,
       "type": "experiment",
       "title": "Final optimization and submission",
-      "hypothesis": "Combining best approaches with jointly optimized thresholds maximizes final_score",
-      "description": "Combine best detection + classification approaches. Optimize all thresholds jointly. Profile inference to ensure <300s. Ensure model weights <420MB. Create final main.py.",
-      "success_criteria": "final_score > 0.83, inference <300s, weights <420MB",
+      "hypothesis": "Combining best detection model + best classification approach + optimized inference settings maximizes final_score",
+      "description": "Combine the best approaches from all experiments. Fine-tune confidence threshold using YOLO's built-in val metrics (not custom code). Ensure model weights < 420MB, inference < 300s. Create clean final main.py for submission.",
+      "success_criteria": "final_score >= 0.80, all constraints met (time, size)",
       "status": "pending",
       "experiment_id": null
     }

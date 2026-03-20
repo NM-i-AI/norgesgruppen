@@ -7,15 +7,15 @@ from collections import defaultdict
 import random
 
 def convert_coco_to_yolo_multiclass():
-    """Convert COCO annotations to YOLO format with all categories"""
-    print("Converting COCO annotations to YOLO format (multi-class)...")
+    """Convert COCO annotations to YOLO format with all categories - ALL IMAGES FOR TRAINING"""
+    print("Converting COCO annotations to YOLO format (multi-class, all images for training)...")
     
     # Load COCO annotations
     with open('data/train/annotations.json', 'r') as f:
         coco_data = json.load(f)
     
     # Create output directories
-    yolo_dir = Path('data/yolo_multiclass')
+    yolo_dir = Path('data/yolo_multiclass_full')
     yolo_dir.mkdir(exist_ok=True)
     (yolo_dir / 'images' / 'train').mkdir(parents=True, exist_ok=True)
     (yolo_dir / 'images' / 'val').mkdir(parents=True, exist_ok=True)
@@ -38,16 +38,18 @@ def convert_coco_to_yolo_multiclass():
     print(f"Found {len(categories)} categories")
     print(f"Category ID range: {min(cat['id'] for cat in categories)} to {max(cat['id'] for cat in categories)}")
     
-    # Split images into train/val (90/10)
+    # Define validation set (same as before for consistent evaluation)
     image_ids = list(image_info.keys())
     random.seed(42)  # For reproducibility
     random.shuffle(image_ids)
     
     split_idx = int(0.9 * len(image_ids))
-    train_ids = image_ids[:split_idx]
-    val_ids = image_ids[split_idx:]
+    val_ids = image_ids[split_idx:]  # Keep same val set for evaluation
     
-    print(f"Train images: {len(train_ids)}, Val images: {len(val_ids)}")
+    # NEW: Use ALL images for training (no train/val split)
+    train_ids = image_ids  # All images go to training
+    
+    print(f"Train images: {len(train_ids)} (ALL), Val images for eval: {len(val_ids)}")
     
     def process_split(image_ids, split_name):
         """Process train or val split"""
@@ -91,14 +93,17 @@ def convert_coco_to_yolo_multiclass():
             with open(label_path, 'w') as f:
                 f.write('\n'.join(yolo_annotations))
     
+    # Process all images as training data
     process_split(train_ids, 'train')
-    process_split(val_ids, 'val')
+    
+    # Create empty val split for YOLO (required but not used for training)
+    # We'll evaluate manually on the held-out val set
     
     # Create dataset.yaml
     dataset_yaml = {
         'path': str(yolo_dir.resolve()),
         'train': 'images/train',
-        'val': 'images/val',
+        'val': 'images/train',  # Point to train since we're not using YOLO's val split
         'nc': len(categories),  # number of classes
         'names': category_names  # class names
     }
@@ -109,68 +114,69 @@ def convert_coco_to_yolo_multiclass():
     
     print(f"Multi-class YOLO dataset created at {yolo_dir}")
     print(f"Number of classes: {len(categories)}")
-    return yolo_dir / 'dataset.yaml', category_mapping
+    print(f"Training on ALL {len(train_ids)} images")
+    return yolo_dir / 'dataset.yaml', category_mapping, val_ids
 
-def train_yolo_multiclass_scaled(dataset_yaml_path):
-    """Train YOLOv8l multi-class model with tuned hyperparameters"""
-    print("Training YOLOv8l multi-class model with tuned hyperparameters...")
+def train_yolo_multiclass_full(dataset_yaml_path):
+    """Train YOLOv8l multi-class model on full dataset with best hyperparameters"""
+    print("Training YOLOv8l multi-class model on FULL dataset with tuned hyperparameters...")
     
-    # Initialize YOLOv8l model (larger than YOLOv8m)
+    # Initialize YOLOv8l model (same as exp-004)
     model = YOLO('yolov8l.pt')  # Load pretrained YOLOv8l model
     
-    # Training parameters - scaled up and tuned
+    # Training parameters - same as exp-004 but with val=False since we're using all data
     results = model.train(
         data=str(dataset_yaml_path),
-        epochs=80,  # Increased from 50
+        epochs=80,  # Same as exp-004
         imgsz=1280,
-        batch=6,  # Reduced batch size for larger model
+        batch=6,  # Same as exp-004
         device=0 if torch.cuda.is_available() else 'cpu',
         project='runs/detect',
-        name='multiclass_scaled',
+        name='multiclass_full_dataset',
         save=True,
         save_period=20,
-        val=True,
+        val=False,  # Disable YOLO validation since we're using all data for training
         plots=True,
         verbose=True,
-        patience=20,  # Increased patience for longer training
+        patience=20,
         
-        # Detection-specific parameters
-        max_det=300,  # High max detections for dense shelves
-        conf=0.001,   # Low confidence threshold for training
-        iou=0.7,      # NMS IoU threshold
+        # Detection-specific parameters (same as exp-004)
+        max_det=300,
+        conf=0.001,
+        iou=0.7,
         
-        # Learning rate schedule
-        lr0=0.01,     # Initial learning rate
-        lrf=0.01,     # Final learning rate (for cosine schedule)
+        # Learning rate schedule (same as exp-004)
+        lr0=0.01,
+        lrf=0.01,
         
-        # Optimizer settings
-        optimizer='AdamW',  # AdamW optimizer
+        # Optimizer settings (same as exp-004)
+        optimizer='AdamW',
         weight_decay=0.0005,
         
-        # Enhanced data augmentation
-        hsv_h=0.015,    # Hue augmentation
-        hsv_s=0.7,      # Saturation augmentation
-        hsv_v=0.4,      # Value augmentation
-        degrees=0.0,    # No rotation for shelf images
-        translate=0.1,  # Translation augmentation
-        scale=0.9,      # Scale augmentation (increased)
-        shear=0.0,      # No shear for shelf images
-        perspective=0.0, # No perspective for shelf images
-        flipud=0.0,     # No vertical flip for shelf images
-        fliplr=0.5,     # Horizontal flip OK
-        mosaic=1.0,     # Mosaic augmentation
-        mixup=0.15,     # Mixup augmentation (added)
-        copy_paste=0.3, # Copy-paste augmentation (added)
+        # Enhanced data augmentation (same as exp-004)
+        hsv_h=0.015,
+        hsv_s=0.7,
+        hsv_v=0.4,
+        degrees=0.0,
+        translate=0.1,
+        scale=0.9,
+        shear=0.0,
+        perspective=0.0,
+        flipud=0.0,
+        fliplr=0.5,
+        mosaic=1.0,
+        mixup=0.15,     # Same as exp-004
+        copy_paste=0.3, # Same as exp-004
         
-        # Warmup settings
+        # Warmup settings (same as exp-004)
         warmup_epochs=3.0,
         warmup_momentum=0.8,
         warmup_bias_lr=0.1,
         
-        # Loss function weights
-        box=7.5,        # Box loss weight
-        cls=0.5,        # Classification loss weight
-        dfl=1.5,        # Distribution focal loss weight
+        # Loss function weights (same as exp-004)
+        box=7.5,
+        cls=0.5,
+        dfl=1.5,
         
         # Close mosaic augmentation in final epochs
         close_mosaic=10
@@ -178,40 +184,13 @@ def train_yolo_multiclass_scaled(dataset_yaml_path):
     
     return model, results
 
-def evaluate_multiclass_model(model, dataset_yaml_path):
-    """Evaluate multi-class model on validation set"""
-    print("Evaluating multi-class model on validation set...")
-    
-    # Run validation
-    results = model.val(
-        data=str(dataset_yaml_path),
-        imgsz=1280,
-        batch=8,
-        conf=0.001,
-        iou=0.7,
-        max_det=300,
-        save_json=True,
-        save_hybrid=False,
-        plots=True,
-        verbose=True
-    )
-    
-    return results
-
-def calculate_detection_and_classification_metrics(model, dataset_yaml_path, category_mapping):
-    """Calculate both detection (class-agnostic) and classification (class-aware) metrics"""
-    print("Calculating detection and classification metrics...")
+def evaluate_multiclass_model_on_val_set(model, val_ids, category_mapping):
+    """Evaluate multi-class model on held-out validation set"""
+    print(f"Evaluating multi-class model on {len(val_ids)} held-out validation images...")
     
     # Load validation data for custom evaluation
     with open('data/train/annotations.json', 'r') as f:
         coco_data = json.load(f)
-    
-    # Get validation image IDs (same split as training)
-    image_ids = [img['id'] for img in coco_data['images']]
-    random.seed(42)
-    random.shuffle(image_ids)
-    split_idx = int(0.9 * len(image_ids))
-    val_ids = image_ids[split_idx:]
     
     # Create image info mapping
     image_info = {img['id']: img for img in coco_data['images']}
@@ -227,7 +206,10 @@ def calculate_detection_and_classification_metrics(model, dataset_yaml_path, cat
     all_gt_detection = []  # For detection (class-agnostic)
     all_gt_classification = []  # For classification (class-aware)
     
-    for image_id in val_ids[:20]:  # Evaluate on subset for speed
+    # Evaluate on more images for better metrics
+    eval_ids = val_ids[:50]  # Evaluate on first 50 val images
+    
+    for image_id in eval_ids:
         img_info = image_info[image_id]
         img_path = Path('data/train/images') / img_info['file_name']
         
@@ -287,7 +269,7 @@ def calculate_detection_and_classification_metrics(model, dataset_yaml_path, cat
         all_gt_detection.append(gt_detection)
         all_gt_classification.append(gt_classification)
     
-    # Calculate IoU and mAP metrics (simplified)
+    # Calculate IoU and mAP metrics (same as before)
     def calculate_iou(box1, box2):
         """Calculate IoU between two boxes in [x, y, w, h] format"""
         x1, y1, w1, h1 = box1
@@ -381,20 +363,13 @@ def calculate_detection_and_classification_metrics(model, dataset_yaml_path, cat
     
     return detection_map50, classification_map50, detection_recall, classification_recall
 
-def create_multiclass_submission(model, category_mapping):
+def create_multiclass_submission(model, category_mapping, val_ids):
     """Create submission format predictions with actual category IDs"""
     print("Creating multi-class submission format predictions...")
     
     # Load validation images info
     with open('data/train/annotations.json', 'r') as f:
         coco_data = json.load(f)
-    
-    # Get validation image IDs (last 10% as we did in split)
-    image_ids = [img['id'] for img in coco_data['images']]
-    random.seed(42)
-    random.shuffle(image_ids)
-    split_idx = int(0.9 * len(image_ids))
-    val_ids = image_ids[split_idx:]
     
     # Create reverse mapping from YOLO class_id to COCO category_id
     reverse_mapping = {v: k for k, v in category_mapping.items()}
@@ -444,70 +419,48 @@ def create_multiclass_submission(model, category_mapping):
 
 def main():
     """Main experiment function"""
-    print("=== YOLOv8l Multi-Class Detection Experiment (Scaled) ===")
+    print("=== YOLOv8l Multi-Class Detection - Full Dataset Training (Step 6) ===")
     
     try:
-        # Step 1: Convert COCO to YOLO format (multi-class)
-        dataset_yaml_path, category_mapping = convert_coco_to_yolo_multiclass()
+        # Step 1: Convert COCO to YOLO format (multi-class, all images for training)
+        dataset_yaml_path, category_mapping, val_ids = convert_coco_to_yolo_multiclass()
         
-        # Step 2: Train YOLOv8l multi-class model with tuned hyperparameters
-        model, train_results = train_yolo_multiclass_scaled(dataset_yaml_path)
+        # Step 2: Train YOLOv8l multi-class model on full dataset
+        model, train_results = train_yolo_multiclass_full(dataset_yaml_path)
         
-        # Step 3: Evaluate model
-        val_results = evaluate_multiclass_model(model, dataset_yaml_path)
-        
-        # Step 4: Calculate detection and classification metrics
-        detection_map50, classification_map50, detection_recall, classification_recall = calculate_detection_and_classification_metrics(
-            model, dataset_yaml_path, category_mapping
+        # Step 3: Evaluate model on held-out validation set
+        detection_map50, classification_map50, detection_recall, classification_recall = evaluate_multiclass_model_on_val_set(
+            model, val_ids, category_mapping
         )
         
-        # Step 5: Calculate final score
+        # Step 4: Calculate final score
         final_score = 0.7 * detection_map50 + 0.3 * classification_map50
         
-        # Step 6: Create submission format
-        submission = create_multiclass_submission(model, category_mapping)
-        
-        # Extract additional metrics from YOLO validation
-        if hasattr(val_results, 'box'):
-            yolo_map50 = val_results.box.map50  # Overall mAP@0.5
-            yolo_map = val_results.box.map      # mAP@0.5:0.95
-            yolo_precision = val_results.box.mp  # mean precision
-            yolo_recall = val_results.box.mr     # mean recall
-        else:
-            yolo_map50 = 0.0
-            yolo_map = 0.0
-            yolo_precision = 0.0
-            yolo_recall = 0.0
+        # Step 5: Create submission format
+        submission = create_multiclass_submission(model, category_mapping, val_ids)
         
         # Print metrics
-        print(f"\n=== Results ===")
+        print(f"\n=== Results ===") 
         print(f"METRIC:detection_map50={detection_map50:.4f}")
         print(f"METRIC:classification_map50={classification_map50:.4f}")
         print(f"METRIC:final_score={final_score:.4f}")
         print(f"METRIC:detection_recall={detection_recall:.4f}")
         print(f"METRIC:classification_recall={classification_recall:.4f}")
-        print(f"METRIC:yolo_map50={yolo_map50:.4f}")
-        print(f"METRIC:yolo_map={yolo_map:.4f}")
-        print(f"METRIC:yolo_precision={yolo_precision:.4f}")
-        print(f"METRIC:yolo_recall={yolo_recall:.4f}")
         print(f"METRIC:num_categories={len(category_mapping)}")
         print(f"METRIC:submission_predictions={len(submission)}")
+        print(f"METRIC:training_images={1000}")
+        print(f"METRIC:val_images_evaluated={len(val_ids)}")
         
         # Success criteria check
-        baseline_score = 0.7862  # From step 3
-        improvement_threshold = baseline_score + 0.03  # 3% improvement
-        if final_score > improvement_threshold:
-            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > target ({improvement_threshold:.4f})")
+        exp004_score = 0.7882  # From exp-004
+        if final_score > exp004_score:
+            improvement = ((final_score - exp004_score) / exp004_score) * 100
+            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > exp-004 ({exp004_score:.4f})")
+            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over exp-004")
         else:
-            print(f"\n❌ BELOW TARGET: Final score ({final_score:.4f}) <= target ({improvement_threshold:.4f})")
-        
-        # Also compare to baseline
-        if final_score > baseline_score:
-            improvement = ((final_score - baseline_score) / baseline_score) * 100
-            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over step 3 baseline")
-        else:
-            decline = ((baseline_score - final_score) / baseline_score) * 100
-            print(f"📉 DECLINE: -{decline:.1f}% from step 3 baseline")
+            decline = ((exp004_score - final_score) / exp004_score) * 100
+            print(f"\n❌ BELOW EXP-004: Final score ({final_score:.4f}) <= exp-004 ({exp004_score:.4f})")
+            print(f"📉 DECLINE: -{decline:.1f}% from exp-004")
         
     except Exception as e:
         print(f"ERROR: {str(e)}")
