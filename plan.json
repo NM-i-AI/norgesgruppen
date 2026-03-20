@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
   "revision": 4,
-  "current_step": 8,
+  "current_step": 9,
   "plan": [
     {
       "step": 1,
@@ -81,8 +81,8 @@
       "hypothesis": "Increasing training from 80 to 120 epochs with refined augmentation (stronger mosaic, more copy_paste) on the full dataset will improve final_score from 0.8498 to 0.87+ as the model has more time to learn rare categories",
       "description": "Build on exp-006's full-dataset approach. Increase epochs to 120, tune augmentation parameters (mosaic=1.0, copy_paste=0.5, mixup=0.2), use cosine LR with lower final LR (lrf=0.005), and increase close_mosaic to 15 epochs. Keep same evaluation methodology.",
       "success_criteria": "final_score > 0.8498 (improvement over exp-006)",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-008"
     },
     {
       "step": 9,
