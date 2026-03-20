@@ -48,3 +48,11 @@
 - Result: Training failed with "operator torchvision::nms does not exist" error, val_score=0.0
 - Side effects: Package installation issues with torch/torchvision compatibility
 - Takeaway: The evaluation function works but YOLOv8 training fails due to torchvision operator compatibility issues that need to be resolved before proceeding.
+
+## Experiment 4 — YOLOv8m baseline at 640px with nc=357
+- Status: FAILED
+- Hypothesis: YOLOv8m provides a reasonable baseline, achieving val_score > 0.15
+- Change: Modified main.py to train YOLOv8m with nc=357, imgsz=640, epochs=100, batch=16, added early stopping and proper CUDA package installation
+- Result: Training failed with "operator torchvision::nms does not exist" error, val_score=0.0
+- Side effects: Package installation issues with torch/torchvision compatibility
+- Takeaway: PyTorch/torchvision version mismatch is preventing YOLO training; need to fix package compatibility before proceeding with model experiments.

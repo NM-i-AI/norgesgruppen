@@ -8,15 +8,37 @@ import shutil
 from statistics import mean
 
 def install_packages():
-    """Install required packages"""
+    """Install required packages with proper torch/torchvision compatibility"""
     packages = [
+        "torch==2.6.0",
+        "torchvision==0.21.0", 
         "ultralytics==8.1.0",
-        "torch==2.6.0", 
-        "torchvision==0.21.0",
         "timm==0.9.12"
     ]
     
-    for package in packages:
+    # Install torch packages with CUDA index
+    torch_packages = [
+        "torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124",
+        "torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124"
+    ]
+    
+    for package in torch_packages:
+        try:
+            print(f"Installing {package}...")
+            result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install'] + package.split(),
+                capture_output=True, text=True, timeout=300
+            )
+            if result.returncode != 0:
+                print(f"Warning: Failed to install {package}: {result.stderr}")
+            else:
+                print(f"Successfully installed {package.split()[0]}")
+        except Exception as e:
+            print(f"Error installing {package}: {e}")
+    
+    # Install other packages
+    other_packages = ["ultralytics==8.1.0", "timm==0.9.12"]
+    for package in other_packages:
         try:
             print(f"Installing {package}...")
             result = subprocess.run(
@@ -273,40 +295,7 @@ def evaluate_with_pycocotools(predictions, ground_truth_coco, image_ids):
         print(f"Error in pycocotools evaluation: {e}")
         return 0.0, 0.0
 
-def create_dummy_predictions(val_data, num_predictions=50):
-    """Create dummy predictions for testing evaluation function"""
-    predictions = []
-    
-    # Get some random annotations to base dummy predictions on
-    annotations = val_data['annotations'][:num_predictions]
-    
-    for i, ann in enumerate(annotations):
-        # Add some noise to the bbox
-        x, y, w, h = ann['bbox']
-        x += random.uniform(-5, 5)
-        y += random.uniform(-5, 5)
-        w += random.uniform(-2, 2)
-        h += random.uniform(-2, 2)
-        
-        # Random score
-        score = random.uniform(0.3, 0.9)
-        
-        # Sometimes use correct category, sometimes random
-        if random.random() < 0.7:  # 70% chance of correct category
-            category_id = ann['category_id']
-        else:
-            category_id = random.randint(0, 356)
-        
-        predictions.append({
-            'image_id': ann['image_id'],
-            'category_id': category_id,
-            'bbox': [max(0, x), max(0, y), max(1, w), max(1, h)],
-            'score': score
-        })
-    
-    return predictions
-
-def train_yolo_model(dataset_yaml_path, model_size='n', epochs=50, imgsz=640, batch=16):
+def train_yolo_model(dataset_yaml_path, model_size='m', epochs=100, imgsz=640, batch=16):
     """Train YOLO model"""
     try:
         from ultralytics import YOLO
@@ -322,9 +311,11 @@ def train_yolo_model(dataset_yaml_path, model_size='n', epochs=50, imgsz=640, ba
             batch=batch,
             device='auto',
             project='runs/detect',
-            name='yolov8n_baseline',
+            name=f'yolov8{model_size}_baseline',
             save=True,
-            plots=True
+            plots=True,
+            patience=50,  # Early stopping
+            save_period=25  # Save checkpoint every 25 epochs
         )
         
         return model, results
@@ -392,10 +383,10 @@ def evaluate_model_with_proper_metrics(model, val_data, images_dir):
         }
 
 def main():
-    print("=== YOLOv8n Baseline with Proper Evaluation ===\n")
+    print("=== YOLOv8m Baseline Training at 640px ===\n")
     
-    # 1. Install packages
-    print("1. Installing required packages...")
+    # 1. Install packages with proper compatibility
+    print("1. Installing required packages with CUDA support...")
     install_packages()
     
     # 2. Load and analyze data
@@ -432,30 +423,16 @@ def main():
     
     print(f"Saved splits to {splits_dir}")
     
-    # 4. Test evaluation function with dummy predictions
-    print("\n4. Testing evaluation function with dummy predictions...")
-    dummy_predictions = create_dummy_predictions(val_data, num_predictions=20)
-    
-    image_ids = [img['id'] for img in val_data['images']]
-    det_map, cls_map = evaluate_with_pycocotools(dummy_predictions, val_data, image_ids)
-    dummy_val_score = 0.7 * det_map + 0.3 * cls_map
-    
-    print(f"Dummy evaluation results:")
-    print(f"  Detection mAP@0.5: {det_map:.4f}")
-    print(f"  Classification mAP@0.5: {cls_map:.4f}")
-    print(f"  Val Score: {dummy_val_score:.4f}")
-    print(f"  Number of dummy predictions: {len(dummy_predictions)}")
-    
-    # 5. Convert to YOLO format
-    print("\n5. Converting to YOLO format...")
+    # 4. Convert to YOLO format
+    print("\n4. Converting to YOLO format...")
     output_dir = Path("yolo_dataset")
     output_dir.mkdir(exist_ok=True)
     
     convert_to_yolo_format(train_data, images_dir, output_dir, 'train')
     convert_to_yolo_format(val_data, images_dir, output_dir, 'val')
     
-    # 6. Create dataset.yaml
-    print("\n6. Creating dataset configuration...")
+    # 5. Create dataset.yaml
+    print("\n5. Creating dataset configuration...")
     num_classes = len(coco_data['categories'])
     print(f"Number of classes: {num_classes}")
     
@@ -490,14 +467,14 @@ def main():
     print(f"  Expected train labels: {len(train_data['annotations'])}")
     print(f"  Expected val labels: {len(val_data['annotations'])}")
     
-    # 7. Train model (small test run)
-    print("\n7. Training YOLOv8n model (short test run)...")
+    # 6. Train YOLOv8m model
+    print("\n6. Training YOLOv8m model...")
     model, train_results = train_yolo_model(
         dataset_yaml_path, 
-        model_size='n', 
-        epochs=5,  # Short test run
+        model_size='m', 
+        epochs=100,
         imgsz=640, 
-        batch=8  # Smaller batch for testing
+        batch=16
     )
     
     if model is None:
@@ -507,8 +484,8 @@ def main():
     
     print("Training completed successfully")
     
-    # 8. Evaluate model with proper metrics
-    print("\n8. Evaluating model with proper detection/classification metrics...")
+    # 7. Evaluate model with proper metrics
+    print("\n7. Evaluating model with proper detection/classification metrics...")
     eval_results = evaluate_model_with_proper_metrics(model, val_data, images_dir)
     
     # Print all metrics
@@ -524,11 +501,14 @@ def main():
     print(f"METRIC:val_score={eval_results['val_score']:.4f}")
     print(f"METRIC:num_predictions={eval_results['num_predictions']}")
     
-    print("\n=== Evaluation Function and YOLO Format Setup Complete ===\n")
-    print("Next steps:")
-    print("- Evaluation function working with pycocotools")
-    print("- YOLO format data created and verified")
-    print("- Ready for full training runs and model comparisons")
+    print("\n=== YOLOv8m Baseline Training Complete ===")
+    print(f"Final val_score: {eval_results['val_score']:.4f}")
+    
+    # Check if we met success criteria
+    if eval_results['val_score'] > 0.15:
+        print("✓ SUCCESS: val_score > 0.15 achieved")
+    else:
+        print("⚠ val_score below target of 0.15")
 
 if __name__ == "__main__":
     main()
