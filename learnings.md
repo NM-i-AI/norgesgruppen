@@ -31,3 +31,11 @@
 - Result: ModuleNotFoundError: No module named 'pycocotools' - experiment failed to start
 - Side effects: None observed due to immediate failure
 - Takeaway: Missing pycocotools dependency must be installed before running any YOLO experiments.
+
+## Experiment 5 — Fix dependencies and get working YOLOv8m multi-class baseline
+- Status: FAILED
+- Hypothesis: Installing pycocotools via subprocess at runtime and using YOLOv8m with 50 epochs will produce a working baseline with final_score > 0.30
+- Change: Added subprocess.run() to install pycocotools, switched to YOLOv8m, reduced epochs to 50, simplified augmentations
+- Result: ModuleNotFoundError for 'ultralytics' - the main YOLO library is missing from the environment
+- Side effects: N/A - code failed to start
+- Takeaway: The environment is missing the core ultralytics package, which must be installed before any YOLO experiments can run.

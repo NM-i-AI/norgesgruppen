@@ -1,8 +1,8 @@
 {
   "session_id": "2026-03-20-11-51",
   "created_at": "2026-03-20T11:51:33.547028+00:00",
-  "revision": 1,
-  "current_step": 4,
+  "revision": 2,
+  "current_step": 5,
   "plan": [
     {
       "step": 1,
@@ -41,36 +41,46 @@
       "hypothesis": "YOLOv8l with copy-paste augmentation and tuned hyperparameters improves both detection and classification over YOLOv8m",
       "description": "Train YOLOv8l at 1280px for 100 epochs with batch=4. Enable copy-paste=0.3, mosaic=1.0, mixup=0.1. Use cosine LR schedule. Compare against YOLOv8m results. If detection improves but classification is still weak, this motivates a two-stage approach.",
       "success_criteria": "final_score improvement of at least 0.03 over step 3",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-004"
     },
     {
       "step": 5,
       "type": "experiment",
-      "title": "Two-stage: YOLO detection + DINOv2/CLIP crop classification",
-      "hypothesis": "Using a strong single-class detector + embedding-based classification of crops against reference images will significantly boost classification mAP for rare classes",
-      "description": "Take the best single-class detector. For each detected box, crop the region and extract embeddings using a pretrained vision model (try torchvision ResNet50 or similar available model). Extract embeddings for all product reference images (data/products/*/main.jpg). Classify each crop by nearest-neighbor matching. Evaluate classification mAP improvement. This leverages the ~335 products with reference images.",
-      "success_criteria": "classification_mAP@0.5 > 0.15, final_score > previous best",
+      "title": "Fix dependencies and get working YOLOv8m multi-class baseline",
+      "hypothesis": "Installing pycocotools via subprocess at runtime and using YOLOv8m with 50 epochs will produce a working baseline with final_score > 0.30",
+      "description": "Add `subprocess.run(['pip', 'install', 'pycocotools'])` at the top of main.py before importing it. Alternatively, restructure to use ultralytics built-in val() metrics and only use pycocotools for final evaluation. Use YOLOv8m (not l) with batch=6, 50 epochs, imgsz=1280, basic augmentations. Focus on getting ANY working result first. Keep the multi-class setup with all 356 categories.",
+      "success_criteria": "Script runs to completion without import errors. Produces detection_mAP@0.5 and classification_mAP@0.5 metrics. Any non-zero final_score.",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 6,
       "type": "experiment",
-      "title": "SAHI tiled inference for dense small objects",
-      "hypothesis": "Sliced inference on high-res images improves detection of small/dense products, boosting detection_mAP@0.5 by 0.05+",
-      "description": "Implement sliced inference: divide each image into overlapping 640x640 tiles, run detection on each tile, merge with NMS. Apply to the best detection model. Compare detection mAP against full-image inference.",
-      "success_criteria": "detection_mAP@0.5 improves by at least 0.03",
+      "title": "Tune training: longer epochs, YOLOv8l, enhanced augmentations",
+      "hypothesis": "Scaling to YOLOv8l with 80-100 epochs, copy-paste augmentation, and cosine LR will improve final_score by 0.05-0.15 over baseline",
+      "description": "Based on baseline results, upgrade to YOLOv8l, increase epochs to 80-100, add copy-paste=0.3, mosaic=1.0, mixup=0.1, cosine LR with AdamW. Reduce batch size to 4 for memory. Compare against baseline.",
+      "success_criteria": "final_score improves by at least 0.05 over step 5 baseline",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 7,
       "type": "experiment",
-      "title": "Ensemble best approaches and optimize for submission",
-      "hypothesis": "Combining multi-class YOLO predictions with two-stage crop classification and SAHI detection maximizes final_score",
-      "description": "Assemble the best detection method (SAHI or full-image) with the best classification method (YOLO multi-class or crop-based retrieval). Use WBF to merge detection ensembles if beneficial. Tune confidence thresholds. Profile inference time to ensure <300s on L4 GPU. Generate final submission.",
-      "success_criteria": "final_score > 0.55, inference completes within 300s",
+      "title": "Two-stage: YOLO detection + embedding-based crop classification",
+      "hypothesis": "Using detected crops matched against product reference images via embeddings will boost classification mAP for rare classes by 0.05+",
+      "description": "Take best detector, run inference to get crops. Extract embeddings using torchvision ResNet50 (pretrained). Compare each crop embedding against reference images (data/products/*/main.jpg) using cosine similarity. Re-assign category based on nearest neighbor. Evaluate classification mAP improvement.",
+      "success_criteria": "classification_mAP@0.5 improves by at least 0.03 over pure YOLO classification",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 8,
+      "type": "experiment",
+      "title": "SAHI tiled inference + ensemble optimization",
+      "hypothesis": "Sliced inference on high-res images improves small object detection, and combining with full-image predictions via NMS/WBF maximizes final_score",
+      "description": "Implement SAHI-style tiled inference (640x640 tiles with overlap on original resolution images). Merge tile predictions with full-image predictions using WBF. Tune confidence thresholds. Combine with best classification method. Generate final optimized submission.",
+      "success_criteria": "final_score improves by at least 0.02 over previous best",
       "status": "pending",
       "experiment_id": null
     }
