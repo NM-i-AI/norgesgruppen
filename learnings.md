@@ -88,3 +88,11 @@
 - Result: NMS operator now works correctly, but training failed due to PyTorch 2.10 weights_only=True security change preventing loading of YOLOv8 pretrained weights
 - Side effects: Other package installations (ultralytics, timm) still fail due to torch RECORD file issues
 - Takeaway: The NMS fix worked, but we need to either downgrade PyTorch or use weights_only=False to load YOLOv8 pretrained weights.
+
+## Experiment 6 — Force-reinstall torchvision and verify YOLO works
+- Status: FAILED
+- Hypothesis: Using pip install --force-reinstall --no-deps for torchvision matching the pre-installed torch 2.6.0+cu124 will fix the NMS operator error
+- Change: Force-reinstalled torchvision 0.21.0+cu124 with --no-deps flag to match existing torch version
+- Result: NMS operator now works correctly, but ultralytics installation fails due to torch package corruption (no RECORD file found)
+- Side effects: The force-reinstall approach corrupted the torch installation, making it uninstallable by pip
+- Takeaway: While the torchvision fix worked for NMS, the --no-deps approach broke torch's pip metadata, requiring a different installation strategy for ultralytics.
