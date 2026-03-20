@@ -7,6 +7,14 @@ Print metrics to stdout as: METRIC:name=value
 Example: METRIC:val_accuracy=0.74
 """
 
+# MONKEY PATCH: Fix PyTorch 2.6 weights_only=True issue for ultralytics
+import torch
+original_torch_load = torch.load
+def patched_torch_load(*args, **kwargs):
+    kwargs.setdefault('weights_only', False)
+    return original_torch_load(*args, **kwargs)
+torch.load = patched_torch_load
+
 import json
 import numpy as np
 from pathlib import Path
@@ -340,7 +348,7 @@ def yolo_predictions_to_coco(yolo_results, val_coco_path, output_path):
     return coco_predictions
 
 def main():
-    print("=== YOLOv8m nc=1 at 1280px Training ===\n")
+    print("=== YOLOv8m nc=1 at 640px Training ===\n")
     
     # Set random seed for reproducibility
     random.seed(42)
@@ -374,17 +382,17 @@ def main():
         # Create dataset YAML for nc=1
         dataset_yaml = create_yolo_dataset_yaml(train_yolo_dir, val_yolo_dir, nc=1, output_path='dataset_nc1.yaml')
         
-        # Step 3: Train YOLOv8m model at 1280px
-        print("\nTraining YOLOv8m model (nc=1, imgsz=1280)...")
+        # Step 3: Train YOLOv8m model at 640px
+        print("\nTraining YOLOv8m model (nc=1, imgsz=640)...")
         model = YOLO('yolov8m.pt')  # Load pretrained YOLOv8m
         
-        # Training parameters - key change: imgsz=1280 and reduced batch size
+        # Training parameters
         train_results = model.train(
             data=dataset_yaml,
-            epochs=100,  # Slightly more epochs for higher resolution
-            imgsz=1280,  # KEY CHANGE: Higher resolution
-            batch=8,     # Reduced batch size due to higher memory usage at 1280px
-            name='yolov8m_nc1_1280px',
+            epochs=80,
+            imgsz=640,
+            batch=16,
+            name='yolov8m_nc1_640px',
             project='runs/detect',
             save=True,
             val=True,
@@ -413,13 +421,13 @@ def main():
             source=val_img_paths,
             conf=0.01,  # Low confidence threshold to maximize recall
             iou=0.7,    # NMS IoU threshold
-            imgsz=1280, # Use same resolution for inference
+            imgsz=640,
             save=False,
             verbose=False
         )
         
         # Convert predictions to COCO format
-        pred_coco_path = 'yolo_nc1_1280_predictions.json'
+        pred_coco_path = 'yolo_nc1_640_predictions.json'
         yolo_predictions_to_coco(val_results, val_split_path, pred_coco_path)
         
         # Step 5: Evaluate using COCO metrics
@@ -439,27 +447,22 @@ def main():
         print(f"METRIC:train_images={len(train_data['images'])}")
         print(f"METRIC:val_images={len(val_data['images'])}")
         print(f"METRIC:model_size=yolov8m")
-        print(f"METRIC:input_size=1280")
+        print(f"METRIC:input_size=640")
         print(f"METRIC:num_classes=1")
-        print(f"METRIC:epochs=100")
-        print(f"METRIC:batch_size=8")
+        print(f"METRIC:epochs=80")
+        print(f"METRIC:batch_size=16")
         
-        # Check if hypothesis is met (5+ mAP improvement over 640px baseline)
-        # Since we don't have the exact 640px baseline result, we'll use a reasonable threshold
-        baseline_detection_map = 0.0  # From previous experiment result
-        improvement = detection_map - baseline_detection_map
-        hypothesis_met = improvement >= 0.05  # 5+ mAP points improvement
+        # Check if hypothesis is met (any non-zero detection score)
+        hypothesis_met = detection_map > 0.0
         
-        print(f"METRIC:baseline_detection_map={baseline_detection_map:.4f}")
-        print(f"METRIC:detection_improvement={improvement:.4f}")
         print(f"METRIC:hypothesis_met={'1.0' if hypothesis_met else '0.0'}")
         
         if hypothesis_met:
-            print(f"\n✓ Hypothesis met: detection_mAP@0.5 improved by {improvement:.4f} (≥0.05)")
+            print(f"\n✓ Hypothesis met: detection_mAP@0.5 = {detection_map:.4f} (> 0.0)")
         else:
-            print(f"\n✗ Hypothesis not met: detection_mAP@0.5 improved by only {improvement:.4f} (<0.05)")
+            print(f"\n✗ Hypothesis not met: detection_mAP@0.5 = {detection_map:.4f} (= 0.0)")
             
-        print(f"\n✓ YOLOv8m nc=1 at 1280px training completed successfully!")
+        print(f"\n✓ YOLOv8m nc=1 at 640px training completed successfully!")
         
     except Exception as e:
         print(f"ERROR: {e}")

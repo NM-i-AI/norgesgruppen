@@ -48,3 +48,9 @@
 - Result: Training failed due to PyTorch 2.6 weights_only loading error when attempting to load YOLOv8m pretrained weights
 - Side effects: None observed due to failure before training started
 - Takeaway: Need to fix PyTorch weights loading compatibility issue by setting weights_only=False or using safe_globals before attempting high-resolution training.
+
+## Experiment 7 — Fix PyTorch weights loading and train YOLOv8m nc=1 at 640
+- Status: REGRESS
+- Metrics: {'val_score': 0.0, 'detection_map_50': 0.0, 'classification_map_50': 0.0, 'hypothesis_met': 0.0}
+- Logger error: Error code: 403 - {'error': {'message': 'Key limit exceeded (daily limit). Manage it using https://openrouter.ai/settings/keys', 'code': 403}}
+
