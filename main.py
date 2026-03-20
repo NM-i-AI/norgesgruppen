@@ -117,43 +117,47 @@ def convert_coco_to_yolo_multiclass():
     print(f"Training on ALL {len(train_ids)} images")
     return yolo_dir / 'dataset.yaml', category_mapping, val_ids
 
-def train_yolo_multiclass_full(dataset_yaml_path):
-    """Train YOLOv8l multi-class model on full dataset with best hyperparameters"""
-    print("Training YOLOv8l multi-class model on FULL dataset with tuned hyperparameters...")
+def train_yolo_multiclass_full_extended(dataset_yaml_path):
+    """Train YOLOv8l multi-class model on full dataset with extended epochs and refined augmentation"""
+    print("Training YOLOv8l multi-class model on FULL dataset with 120 epochs and refined augmentation...")
     
-    # Initialize YOLOv8l model (same as exp-004)
+    # Initialize YOLOv8l model
     model = YOLO('yolov8l.pt')  # Load pretrained YOLOv8l model
     
-    # Training parameters - same as exp-004 but with val=False since we're using all data
+    # Training parameters - STEP 8 CHANGES:
+    # 1. Increase epochs from 80 to 120
+    # 2. Refined augmentation: mosaic=1.0, copy_paste=0.5, mixup=0.2
+    # 3. Lower final LR: lrf=0.005 (from 0.01)
+    # 4. Increase close_mosaic to 15 epochs (from 10)
     results = model.train(
         data=str(dataset_yaml_path),
-        epochs=80,  # Same as exp-004
+        epochs=120,  # INCREASED from 80
         imgsz=1280,
-        batch=6,  # Same as exp-004
+        batch=6,
         device=0 if torch.cuda.is_available() else 'cpu',
         project='runs/detect',
-        name='multiclass_full_dataset',
+        name='multiclass_full_120epochs',
         save=True,
-        save_period=20,
+        save_period=30,  # Save every 30 epochs for longer training
         val=False,  # Disable YOLO validation since we're using all data for training
         plots=True,
         verbose=True,
-        patience=20,
+        patience=30,  # Increased patience for longer training
         
-        # Detection-specific parameters (same as exp-004)
+        # Detection-specific parameters
         max_det=300,
         conf=0.001,
         iou=0.7,
         
-        # Learning rate schedule (same as exp-004)
+        # Learning rate schedule - REFINED
         lr0=0.01,
-        lrf=0.01,
+        lrf=0.005,  # LOWERED final LR from 0.01 to 0.005
         
-        # Optimizer settings (same as exp-004)
+        # Optimizer settings
         optimizer='AdamW',
         weight_decay=0.0005,
         
-        # Enhanced data augmentation (same as exp-004)
+        # REFINED data augmentation parameters
         hsv_h=0.015,
         hsv_s=0.7,
         hsv_v=0.4,
@@ -164,22 +168,22 @@ def train_yolo_multiclass_full(dataset_yaml_path):
         perspective=0.0,
         flipud=0.0,
         fliplr=0.5,
-        mosaic=1.0,
-        mixup=0.15,     # Same as exp-004
-        copy_paste=0.3, # Same as exp-004
+        mosaic=1.0,      # INCREASED from 1.0 (keep strong)
+        mixup=0.2,       # INCREASED from 0.15 to 0.2
+        copy_paste=0.5,  # INCREASED from 0.3 to 0.5
         
-        # Warmup settings (same as exp-004)
+        # Warmup settings
         warmup_epochs=3.0,
         warmup_momentum=0.8,
         warmup_bias_lr=0.1,
         
-        # Loss function weights (same as exp-004)
+        # Loss function weights
         box=7.5,
         cls=0.5,
         dfl=1.5,
         
-        # Close mosaic augmentation in final epochs
-        close_mosaic=10
+        # Close mosaic augmentation in final epochs - INCREASED
+        close_mosaic=15  # INCREASED from 10 to 15
     )
     
     return model, results
@@ -419,14 +423,14 @@ def create_multiclass_submission(model, category_mapping, val_ids):
 
 def main():
     """Main experiment function"""
-    print("=== YOLOv8l Multi-Class Detection - Full Dataset Training (Step 6) ===")
+    print("=== YOLOv8l Multi-Class Detection - 120 Epochs with Refined Augmentation (Step 8) ===")
     
     try:
         # Step 1: Convert COCO to YOLO format (multi-class, all images for training)
         dataset_yaml_path, category_mapping, val_ids = convert_coco_to_yolo_multiclass()
         
-        # Step 2: Train YOLOv8l multi-class model on full dataset
-        model, train_results = train_yolo_multiclass_full(dataset_yaml_path)
+        # Step 2: Train YOLOv8l multi-class model with extended epochs and refined augmentation
+        model, train_results = train_yolo_multiclass_full_extended(dataset_yaml_path)
         
         # Step 3: Evaluate model on held-out validation set
         detection_map50, classification_map50, detection_recall, classification_recall = evaluate_multiclass_model_on_val_set(
@@ -450,17 +454,19 @@ def main():
         print(f"METRIC:submission_predictions={len(submission)}")
         print(f"METRIC:training_images={1000}")
         print(f"METRIC:val_images_evaluated={len(val_ids)}")
+        print(f"METRIC:epochs=120")
+        print(f"METRIC:augmentation_refined=1")
         
         # Success criteria check
-        exp004_score = 0.7882  # From exp-004
-        if final_score > exp004_score:
-            improvement = ((final_score - exp004_score) / exp004_score) * 100
-            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > exp-004 ({exp004_score:.4f})")
-            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over exp-004")
+        exp006_score = 0.8498  # From exp-006
+        if final_score > exp006_score:
+            improvement = ((final_score - exp006_score) / exp006_score) * 100
+            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > exp-006 ({exp006_score:.4f})")
+            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over exp-006")
         else:
-            decline = ((exp004_score - final_score) / exp004_score) * 100
-            print(f"\n❌ BELOW EXP-004: Final score ({final_score:.4f}) <= exp-004 ({exp004_score:.4f})")
-            print(f"📉 DECLINE: -{decline:.1f}% from exp-004")
+            decline = ((exp006_score - final_score) / exp006_score) * 100
+            print(f"\n❌ BELOW EXP-006: Final score ({final_score:.4f}) <= exp-006 ({exp006_score:.4f})")
+            print(f"📉 DECLINE: -{decline:.1f}% from exp-006")
         
     except Exception as e:
         print(f"ERROR: {str(e)}")

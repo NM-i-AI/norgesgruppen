@@ -56,3 +56,11 @@
 - Result: RuntimeError during crop classifier training - unable to allocate shared memory for DataLoader workers
 - Side effects: System ran out of shared memory resources during intensive data loading operations
 - Takeaway: The two-stage approach failed due to memory constraints; reduce DataLoader workers or batch size to avoid shared memory exhaustion.
+
+## Experiment 8 — YOLOv8l with more epochs and refined augmentation on full dataset
+- Status: REGRESS
+- Hypothesis: Increasing training from 80 to 120 epochs with refined augmentation (stronger mosaic, more copy_paste) on the full dataset will improve final_score from 0.8498 to 0.87+
+- Change: Increased epochs 80→120, refined augmentation (mosaic=1.0, copy_paste=0.5, mixup=0.2), lowered final LR to 0.005, increased close_mosaic to 15 epochs
+- Result: final_score 0.8498 → 0.8484 (-0.2% decline)
+- Side effects: Significantly longer training time (1861s vs previous experiments), no memory issues
+- Takeaway: Extended training with stronger augmentation caused slight overfitting rather than improvement, suggesting the model was already well-trained at 80 epochs.
