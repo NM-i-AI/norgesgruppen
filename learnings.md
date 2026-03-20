@@ -40,3 +40,11 @@
 - Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading YOLOv8m pretrained weights
 - Side effects: None (training never started)
 - Takeaway: Need to either set weights_only=False in torch.load or use torch.serialization.add_safe_globals to allowlist ultralytics classes for YOLOv8 pretrained weight loading.
+
+## Experiment 6 — YOLOv8m nc=1 at 1280
+- Status: FAILED
+- Hypothesis: Higher resolution significantly improves detection on dense shelves with small products, gaining 5+ mAP points
+- Change: Modified main.py to train YOLOv8m at 1280px resolution with nc=1, reduced batch size to 8, increased epochs to 100
+- Result: Training failed due to PyTorch 2.6 weights_only loading error when attempting to load YOLOv8m pretrained weights
+- Side effects: None observed due to failure before training started
+- Takeaway: Need to fix PyTorch weights loading compatibility issue by setting weights_only=False or using safe_globals before attempting high-resolution training.

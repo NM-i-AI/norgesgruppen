@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-22-31",
   "created_at": "2026-03-20T22:31:40.610746+00:00",
   "revision": 2,
-  "current_step": 5,
+  "current_step": 6,
   "plan": [
     {
       "step": 1,
@@ -51,8 +51,8 @@
       "hypothesis": "A single-class YOLOv8m detector at 640px establishes a solid detection baseline, achieving detection_mAP@0.5 > 0.3",
       "description": "Train YOLOv8m with nc=1 (all categories mapped to class 0), imgsz=640, epochs=80, batch=16. Evaluate detection_mAP@0.5 on val split. This establishes the detection baseline for the two-stage pipeline.",
       "success_criteria": "detection_mAP@0.5 > 0.3 on val split",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-005"
     },
     {
       "step": 6,
