@@ -24,3 +24,11 @@
 - Result: final_score 0.6808 → 0.7862 (+15.5% improvement)
 - Side effects: Longer training time (547.7s), lower individual YOLO metrics (mAP@0.5: 0.5957), but higher task-specific metrics
 - Takeaway: Multi-class approach successfully outperforms single-class baseline by directly learning both detection and classification in one model.
+
+## Experiment 4 — Scale up: YOLOv8l/x multi-class with tuned hyperparameters
+- Status: SUCCESS
+- Hypothesis: Larger model (YOLOv8l or x) with more epochs and tuned augmentation improves both detection and classification by 5-10%
+- Change: Scaled up from YOLOv8m to YOLOv8l with 80 epochs, enhanced augmentation (mixup=0.15, copy_paste=0.3), AdamW optimizer, cosine LR schedule, tuned loss weights, and reduced batch size to 6
+- Result: final_score 0.7862 → 0.7882 (+0.3%), detection_map50 0.8219, classification_map50 0.7098
+- Side effects: Significantly longer training time (1280.8s vs previous experiments), reduced batch size required for memory constraints
+- Takeaway: Scaling up model size with extensive hyperparameter tuning yielded minimal improvement (+0.3%), suggesting the bottleneck may be data quality or architecture rather than model capacity.

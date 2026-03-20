@@ -111,45 +111,69 @@ def convert_coco_to_yolo_multiclass():
     print(f"Number of classes: {len(categories)}")
     return yolo_dir / 'dataset.yaml', category_mapping
 
-def train_yolo_multiclass(dataset_yaml_path):
-    """Train YOLOv8m multi-class model"""
-    print("Training YOLOv8m multi-class model...")
+def train_yolo_multiclass_scaled(dataset_yaml_path):
+    """Train YOLOv8l multi-class model with tuned hyperparameters"""
+    print("Training YOLOv8l multi-class model with tuned hyperparameters...")
     
-    # Initialize YOLOv8m model
-    model = YOLO('yolov8m.pt')  # Load pretrained model
+    # Initialize YOLOv8l model (larger than YOLOv8m)
+    model = YOLO('yolov8l.pt')  # Load pretrained YOLOv8l model
     
-    # Training parameters
+    # Training parameters - scaled up and tuned
     results = model.train(
         data=str(dataset_yaml_path),
-        epochs=50,  # Increased epochs for multi-class
+        epochs=80,  # Increased from 50
         imgsz=1280,
-        batch=8,  # Adjust based on GPU memory
+        batch=6,  # Reduced batch size for larger model
         device=0 if torch.cuda.is_available() else 'cpu',
         project='runs/detect',
-        name='multiclass',
+        name='multiclass_scaled',
         save=True,
-        save_period=10,
+        save_period=20,
         val=True,
         plots=True,
         verbose=True,
-        patience=15,  # Increased patience for multi-class
+        patience=20,  # Increased patience for longer training
+        
         # Detection-specific parameters
         max_det=300,  # High max detections for dense shelves
         conf=0.001,   # Low confidence threshold for training
         iou=0.7,      # NMS IoU threshold
-        # Data augmentation
-        hsv_h=0.015,
-        hsv_s=0.7,
-        hsv_v=0.4,
-        degrees=0.0,  # No rotation for shelf images
-        translate=0.1,
-        scale=0.5,
-        shear=0.0,
-        perspective=0.0,
-        flipud=0.0,   # No vertical flip for shelf images
-        fliplr=0.5,   # Horizontal flip OK
-        mosaic=1.0,
-        mixup=0.0
+        
+        # Learning rate schedule
+        lr0=0.01,     # Initial learning rate
+        lrf=0.01,     # Final learning rate (for cosine schedule)
+        
+        # Optimizer settings
+        optimizer='AdamW',  # AdamW optimizer
+        weight_decay=0.0005,
+        
+        # Enhanced data augmentation
+        hsv_h=0.015,    # Hue augmentation
+        hsv_s=0.7,      # Saturation augmentation
+        hsv_v=0.4,      # Value augmentation
+        degrees=0.0,    # No rotation for shelf images
+        translate=0.1,  # Translation augmentation
+        scale=0.9,      # Scale augmentation (increased)
+        shear=0.0,      # No shear for shelf images
+        perspective=0.0, # No perspective for shelf images
+        flipud=0.0,     # No vertical flip for shelf images
+        fliplr=0.5,     # Horizontal flip OK
+        mosaic=1.0,     # Mosaic augmentation
+        mixup=0.15,     # Mixup augmentation (added)
+        copy_paste=0.3, # Copy-paste augmentation (added)
+        
+        # Warmup settings
+        warmup_epochs=3.0,
+        warmup_momentum=0.8,
+        warmup_bias_lr=0.1,
+        
+        # Loss function weights
+        box=7.5,        # Box loss weight
+        cls=0.5,        # Classification loss weight
+        dfl=1.5,        # Distribution focal loss weight
+        
+        # Close mosaic augmentation in final epochs
+        close_mosaic=10
     )
     
     return model, results
@@ -420,14 +444,14 @@ def create_multiclass_submission(model, category_mapping):
 
 def main():
     """Main experiment function"""
-    print("=== YOLOv8m Multi-Class Detection Experiment ===")
+    print("=== YOLOv8l Multi-Class Detection Experiment (Scaled) ===")
     
     try:
         # Step 1: Convert COCO to YOLO format (multi-class)
         dataset_yaml_path, category_mapping = convert_coco_to_yolo_multiclass()
         
-        # Step 2: Train YOLOv8m multi-class model
-        model, train_results = train_yolo_multiclass(dataset_yaml_path)
+        # Step 2: Train YOLOv8l multi-class model with tuned hyperparameters
+        model, train_results = train_yolo_multiclass_scaled(dataset_yaml_path)
         
         # Step 3: Evaluate model
         val_results = evaluate_multiclass_model(model, dataset_yaml_path)
@@ -470,11 +494,20 @@ def main():
         print(f"METRIC:submission_predictions={len(submission)}")
         
         # Success criteria check
-        baseline_score = 0.6808  # From step 2
-        if final_score > baseline_score:
-            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > baseline ({baseline_score:.4f})")
+        baseline_score = 0.7862  # From step 3
+        improvement_threshold = baseline_score + 0.03  # 3% improvement
+        if final_score > improvement_threshold:
+            print(f"\n✅ SUCCESS: Final score ({final_score:.4f}) > target ({improvement_threshold:.4f})")
         else:
-            print(f"\n❌ BELOW BASELINE: Final score ({final_score:.4f}) <= baseline ({baseline_score:.4f})")
+            print(f"\n❌ BELOW TARGET: Final score ({final_score:.4f}) <= target ({improvement_threshold:.4f})")
+        
+        # Also compare to baseline
+        if final_score > baseline_score:
+            improvement = ((final_score - baseline_score) / baseline_score) * 100
+            print(f"📈 IMPROVEMENT: +{improvement:.1f}% over step 3 baseline")
+        else:
+            decline = ((baseline_score - final_score) / baseline_score) * 100
+            print(f"📉 DECLINE: -{decline:.1f}% from step 3 baseline")
         
     except Exception as e:
         print(f"ERROR: {str(e)}")

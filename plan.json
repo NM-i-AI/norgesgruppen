@@ -2,7 +2,7 @@
   "session_id": "2026-03-20-12-11",
   "created_at": "2026-03-20T12:11:57.856806+00:00",
   "revision": 1,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "Training YOLOv8m with all categories directly achieves both detection and classification, yielding final_score > single-class approach",
       "description": "Convert annotations to YOLO format with all 329 categories. Train YOLOv8m at imgsz=1280 for 50 epochs. Evaluate both detection_mAP@0.5 (class-agnostic) and classification_mAP@0.5 (class-aware). Compare final_score with single-class baseline.",
       "success_criteria": "final_score > baseline from step 2",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,
