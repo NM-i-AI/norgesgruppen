@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-10-25",
   "created_at": "2026-03-21T10:25:20.816153+00:00",
   "revision": 3,
-  "current_step": 6,
+  "current_step": 7,
   "plan": [
     {
       "step": 1,
@@ -61,8 +61,8 @@
       "hypothesis": "Patching torch.load before ultralytics import and using a small model will give us a working training pipeline quickly.",
       "description": "Apply torch.load monkey-patch at the very top of main.py BEFORE any ultralytics import. Use torch.serialization.add_safe_globals if needed. Start with YOLOv8n (smallest model) at 640px for fast iteration. Train for 50 epochs with batch=16. If monkey-patching fails, try downloading weights manually and converting them. This is primarily about getting ANY working YOLO training, not optimal performance.",
       "success_criteria": "Training completes successfully and produces val_score > 0.0",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-006"
     },
     {
       "step": 7,

@@ -48,3 +48,11 @@
 - Result: Training failed with "torch.cat(): expected a non-empty list of Tensors" error during validation after model loaded successfully
 - Side effects: Model architecture loaded correctly (3.4M parameters), pretrained weights transferred (319/355 items), but validation dataset appears empty
 - Takeaway: The dataset configuration is broken - validation is trying to concatenate empty tensor lists, suggesting no valid labels or images are being found during validation.
+
+## Experiment 7 — Train YOLOv8x single-class detector at 1280
+- Status: FAILED
+- Hypothesis: With the weight loading fix proven, a larger single-class detector at high resolution will achieve strong detection recall on shelf images.
+- Change: Modified main.py to train YOLOv8x single-class detector at 1280px resolution with all annotations mapped to class 0, using nc=1 configuration.
+- Result: Training failed with "not enough values to unpack (expected 3, got 0)" error after all training images were ignored due to label class mismatches (classes 349, 355 exceed dataset class count 1).
+- Side effects: No valid training data remained after class filtering, preventing dataset initialization.
+- Takeaway: The single-class label conversion failed - labels still contain original multi-class IDs instead of being remapped to class 0, requiring proper label preprocessing before training.

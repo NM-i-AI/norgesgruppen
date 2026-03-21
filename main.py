@@ -160,7 +160,10 @@ def coco_to_yolo_labels(coco_data, output_dir, single_class=False):
                 height = h / img_h
                 
                 # Class ID (0 for single class, original category_id for multi-class)
-                class_id = 0 if single_class else ann['category_id']
+                if single_class:
+                    class_id = 0  # Force all annotations to class 0
+                else:
+                    class_id = ann['category_id']
                 
                 f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
     
@@ -197,9 +200,9 @@ def create_yolo_dataset_files():
     
     return train_txt_path, val_txt_path
 
-def train_yolo_baseline():
-    """Train YOLOv8n baseline model."""
-    print("\n=== Training YOLOv8n Baseline ===")
+def train_yolo_single_class():
+    """Train YOLOv8x single-class detector at 1280px."""
+    print("\n=== Training YOLOv8x Single-Class Detector ===")
     
     # Check if splits exist, create if needed
     data_path = Path("data")
@@ -207,45 +210,45 @@ def train_yolo_baseline():
         print("Creating train/val splits...")
         create_train_val_split()
     
-    # Create labels directory
-    labels_dir = data_path / "train" / "labels"
+    # Create single-class labels directory
+    labels_dir = data_path / "train" / "labels_single_class"
     labels_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check if YOLO labels exist, create if needed
+    # Check if single-class YOLO labels exist, create if needed
     if not list(labels_dir.glob("*.txt")):
-        print("Creating YOLO labels...")
-        # Load full dataset and create labels for all images
+        print("Creating single-class YOLO labels...")
+        # Load full dataset and create single-class labels for all images
         with open(data_path / "train" / "annotations.json") as f:
             full_coco = json.load(f)
         
-        coco_to_yolo_labels(full_coco, labels_dir, single_class=False)
+        coco_to_yolo_labels(full_coco, labels_dir, single_class=True)
     
     # Create train.txt and val.txt files
     train_txt_path, val_txt_path = create_yolo_dataset_files()
     
-    # Create data.yaml with correct paths
-    yaml_content = f"""# YOLO dataset config
+    # Create data.yaml with correct paths for single-class
+    yaml_content = f"""# YOLO single-class dataset config
 path: {data_path.absolute()}
 train: {train_txt_path.name}
 val: {val_txt_path.name}
 
-nc: 357
-names: {list(range(357))}
+nc: 1
+names: ['product']
 """
     
-    yaml_path = data_path / "data_mc.yaml"
+    yaml_path = data_path / "data_single_class.yaml"
     with open(yaml_path, 'w') as f:
         f.write(yaml_content)
     
     print(f"Created {yaml_path}")
     
     try:
-        # Initialize YOLOv8n model
-        print("Initializing YOLOv8n model...")
-        model = YOLO('yolov8n.pt')  # Start with nano for fast iteration
+        # Initialize YOLOv8x model
+        print("Initializing YOLOv8x model...")
+        model = YOLO('yolov8x.pt')  # Large model for better detection
         
         print(f"Model loaded successfully")
-        print(f"YOLOv8n summary: {model.model}")
+        print(f"YOLOv8x summary: {model.model}")
         print(f"Model info: {model.info()}")
         
         # Determine device to use
@@ -260,19 +263,21 @@ names: {list(range(357))}
         print("Starting training...")
         results = model.train(
             data=str(yaml_path),
-            epochs=50,  # Reduced for fast iteration
-            batch=16,   # Conservative batch size
-            imgsz=640,  # Standard resolution
-            device=device,  # Use detected device instead of 'auto'
+            epochs=100,  # More epochs for single-class convergence
+            batch=-1,    # Auto batch size
+            imgsz=1280,  # High resolution for small products
+            device=device,
             project='runs/detect',
-            name='yolov8n_baseline',
+            name='yolov8x_single_class_1280',
             exist_ok=True,
             verbose=True,
             save=True,
             plots=True,
             val=True,
-            patience=20,
-            close_mosaic=25  # Close mosaic at 50% of training
+            patience=30,  # More patience for larger model
+            close_mosaic=50,  # Close mosaic at 50% of training
+            amp=True,     # Mixed precision for memory efficiency
+            cache=True    # Cache images for faster training
         )
         
         print(f"Training completed successfully!")
@@ -293,7 +298,7 @@ names: {list(range(357))}
             
             if img_path.exists():
                 # Run inference
-                results = model(str(img_path), verbose=False)
+                results = model(str(img_path), verbose=False, imgsz=1280)
                 
                 # Convert results to COCO format
                 for result in results:
@@ -311,14 +316,14 @@ names: {list(range(357))}
                             
                             val_predictions.append({
                                 'image_id': img_info['id'],
-                                'category_id': cls,
+                                'category_id': cls,  # Will be 0 for single-class
                                 'bbox': [float(x), float(y), float(w), float(h)],
                                 'score': float(conf)
                             })
         
         print(f"Generated {len(val_predictions)} predictions")
         
-        # Evaluate predictions
+        # Evaluate predictions - focus on detection metrics
         if val_predictions:
             val_score, det_map, cls_map = evaluate_predictions(val_predictions, val_coco)
             
@@ -327,14 +332,21 @@ names: {list(range(357))}
             print(f"Classification mAP@0.5: {cls_map:.4f}")
             print(f"Combined val_score: {val_score:.4f}")
             
+            # Calculate recall metrics
+            total_gt_boxes = len(val_coco['annotations'])
+            print(f"Total ground truth boxes: {total_gt_boxes}")
+            print(f"Total predictions: {len(val_predictions)}")
+            
             # Report metrics for orchestrator
             print(f"\nMETRIC:val_score={val_score:.4f}")
             print(f"METRIC:detection_map={det_map:.4f}")
             print(f"METRIC:classification_map={cls_map:.4f}")
             print(f"METRIC:num_predictions={len(val_predictions)}")
-            print(f"METRIC:model_size=yolov8n")
-            print(f"METRIC:resolution=640")
-            print(f"METRIC:epochs=50")
+            print(f"METRIC:num_gt_boxes={total_gt_boxes}")
+            print(f"METRIC:model_size=yolov8x")
+            print(f"METRIC:resolution=1280")
+            print(f"METRIC:epochs=100")
+            print(f"METRIC:single_class=1")
             
         else:
             print("No predictions generated - model may need more training")
@@ -355,10 +367,10 @@ names: {list(range(357))}
 
 def main():
     """Main training pipeline."""
-    print("=== YOLOv8n Baseline Training Pipeline ===")
+    print("=== YOLOv8x Single-Class Training Pipeline ===")
     
-    # Train baseline model
-    train_yolo_baseline()
+    # Train single-class detector
+    train_yolo_single_class()
     
     print("\n=== Training Pipeline Complete ===")
 
