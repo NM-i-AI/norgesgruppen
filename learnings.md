@@ -24,3 +24,11 @@
 - Result: Successfully created train (224 images, 20345 annotations) and val (24 images, 2386 annotations) splits with 9.7% validation ratio
 - Side effects: Minor numpy warning in evaluation pipeline that needs fixing, but doesn't affect functionality
 - Takeaway: Evaluation infrastructure is ready for experiments, though the numpy error in classification evaluation should be addressed before running real predictions.
+
+## Experiment 4 — Train YOLOv8x multiclass (nc=356) baseline at imgsz=1280
+- Status: FAILED
+- Hypothesis: YOLOv8x with 356 classes at 1280 resolution provides a baseline for both detection and classification
+- Change: Modified main.py to train YOLOv8x multiclass model with nc=356 at imgsz=1280 for 100 epochs
+- Result: AttributeError - torch.serialization module has no attribute 'DEFAULT_WEIGHTS_ONLY'
+- Side effects: None (failed before training started)
+- Takeaway: The torch version being used doesn't support the DEFAULT_WEIGHTS_ONLY attribute, need to remove or conditionally handle this torch serialization setting.

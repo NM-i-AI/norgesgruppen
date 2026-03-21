@@ -1,115 +1,208 @@
 import json
+import yaml
 from pathlib import Path
+import torch
+
+# Set weights_only=False for ultralytics compatibility
+torch.serialization.add_safe_globals(['torch.nn.modules.container.ModuleList'])
+
+from ultralytics import YOLO
 from utils import (
     create_train_val_split, 
     setup_yolo_dataset_structure, 
-    test_evaluation_pipeline
+    test_evaluation_pipeline,
+    yolo_predictions_to_coco,
+    evaluate_coco_predictions
 )
 
 def main():
-    print("=== Building Evaluation Pipeline and Train/Val Split ===")
+    print("=== Training YOLOv8x Multiclass Baseline ===")
     
-    # 1. Create 90/10 train/val split
-    print("\n1. Creating 90/10 stratified train/val split...")
-    train_count, val_count = create_train_val_split(
-        annotations_path='data/train/annotations.json',
-        train_output='train_split.json',
-        val_output='val_split.json',
-        val_ratio=0.1,
-        seed=42
-    )
+    # 1. Verify splits exist
+    if not Path('train_split.json').exists() or not Path('val_split.json').exists():
+        print("Creating train/val splits...")
+        create_train_val_split(
+            annotations_path='data/train/annotations.json',
+            train_output='train_split.json',
+            val_output='val_split.json',
+            val_ratio=0.1,
+            seed=42
+        )
     
-    # 2. Setup YOLO dataset structure
-    print("\n2. Setting up YOLO dataset structure...")
-    setup_yolo_dataset_structure()
+    # 2. Setup YOLO dataset structure if needed
+    if not Path('datasets/train/images').exists():
+        print("Setting up YOLO dataset structure...")
+        setup_yolo_dataset_structure()
     
-    # 3. Test evaluation pipeline
-    print("\n3. Testing evaluation pipeline...")
-    results = test_evaluation_pipeline()
+    # 3. Create YAML config for multiclass training
+    config = {
+        'path': str(Path.cwd() / 'datasets'),
+        'train': 'train/images',
+        'val': 'val/images',
+        'nc': 356,  # Number of classes (0-355)
+        'names': {}
+    }
     
-    # 4. Verify split quality
-    print("\n4. Verifying split quality...")
+    # Load category names from annotations
+    with open('data/train/annotations.json', 'r') as f:
+        coco_data = json.load(f)
     
-    # Load and analyze splits
-    with open('train_split.json', 'r') as f:
-        train_data = json.load(f)
-    with open('val_split.json', 'r') as f:
-        val_data = json.load(f)
+    for cat in coco_data['categories']:
+        config['names'][cat['id']] = cat['name']
     
-    # Check store section distribution
-    def get_section_distribution(images):
-        sections = {'Egg': 0, 'Frokost': 0, 'Knekkebrod': 0, 'Varmedrikker': 0, 'Unknown': 0}
-        for img in images:
-            filename = img['file_name']
-            if 'Egg' in filename:
-                sections['Egg'] += 1
-            elif 'Frokost' in filename:
-                sections['Frokost'] += 1
-            elif 'Knekkebrod' in filename:
-                sections['Knekkebrod'] += 1
-            elif 'Varmedrikker' in filename:
-                sections['Varmedrikker'] += 1
-            else:
-                sections['Unknown'] += 1
-        return sections
+    # Save config
+    config_path = 'data_multiclass.yaml'
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False)
     
-    train_sections = get_section_distribution(train_data['images'])
-    val_sections = get_section_distribution(val_data['images'])
+    print(f"Created config: {config_path}")
+    print(f"  Classes: {config['nc']}")
+    print(f"  Train path: {config['path']}/{config['train']}")
+    print(f"  Val path: {config['path']}/{config['val']}")
     
-    print(f"\nStore section distribution:")
-    print(f"  Train: {train_sections}")
-    print(f"  Val: {val_sections}")
+    # 4. Initialize YOLOv8x model with weights_only=False
+    print("\nInitializing YOLOv8x model...")
     
-    # Check category coverage
-    train_cats = set(ann['category_id'] for ann in train_data['annotations'])
-    val_cats = set(ann['category_id'] for ann in val_data['annotations'])
+    # Temporarily disable weights_only for YOLO model loading
+    original_weights_only = torch.serialization.DEFAULT_WEIGHTS_ONLY
+    torch.serialization.DEFAULT_WEIGHTS_ONLY = False
     
-    print(f"\nCategory coverage:")
-    print(f"  Train: {len(train_cats)} categories")
-    print(f"  Val: {len(val_cats)} categories")
-    print(f"  Overlap: {len(train_cats & val_cats)} categories")
-    print(f"  Val-only: {len(val_cats - train_cats)} categories")
+    try:
+        model = YOLO('yolov8x.pt')  # Load pretrained weights
+    finally:
+        torch.serialization.DEFAULT_WEIGHTS_ONLY = original_weights_only
     
-    # Calculate final metrics
-    total_images = train_count + val_count
-    val_ratio = val_count / total_images
+    # Check GPU availability
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     
-    print(f"\n=== SPLIT SUMMARY ===")
-    print(f"Total images: {total_images}")
-    print(f"Train images: {train_count} ({(1-val_ratio):.1%})")
-    print(f"Val images: {val_count} ({val_ratio:.1%})")
-    print(f"Train annotations: {len(train_data['annotations'])}")
-    print(f"Val annotations: {len(val_data['annotations'])}")
+    # 5. Train model
+    print("\nStarting training...")
+    print(f"Configuration:")
+    print(f"  Model: YOLOv8x")
+    print(f"  Classes: {config['nc']}")
+    print(f"  Image size: 1280")
+    print(f"  Epochs: 100")
+    print(f"  Device: {device}")
     
-    # Verify YOLO structure exists
-    yolo_dirs = [
-        'datasets/train/images',
-        'datasets/train/labels', 
-        'datasets/val/images',
-        'datasets/val/labels'
-    ]
+    try:
+        results = model.train(
+            data=config_path,
+            epochs=100,
+            imgsz=1280,
+            batch=4,  # Conservative batch size for 1280 resolution
+            device=device,
+            project='runs/train',
+            name='yolov8x_multiclass_baseline',
+            save_period=25,  # Save checkpoint every 25 epochs
+            patience=50,  # Early stopping patience
+            close_mosaic=50,  # Close mosaic augmentation after 50 epochs
+            verbose=True
+        )
+        
+        print("\nTraining completed successfully!")
+        
+        # 6. Load best model for evaluation
+        best_model_path = results.save_dir / 'weights' / 'best.pt'
+        print(f"\nLoading best model: {best_model_path}")
+        
+        # Load best model with weights_only=False
+        torch.serialization.DEFAULT_WEIGHTS_ONLY = False
+        try:
+            best_model = YOLO(best_model_path)
+        finally:
+            torch.serialization.DEFAULT_WEIGHTS_ONLY = original_weights_only
+        
+        # 7. Run inference on validation set
+        print("\nRunning inference on validation set...")
+        
+        # Load val split info
+        with open('val_split.json', 'r') as f:
+            val_data = json.load(f)
+        
+        val_image_info = []
+        val_image_paths = []
+        
+        for img_info in val_data['images']:
+            val_image_info.append({
+                'id': img_info['id'],
+                'width': img_info['width'],
+                'height': img_info['height']
+            })
+            val_image_paths.append(f"datasets/val/images/{img_info['file_name']}")
+        
+        # Run inference
+        predictions = best_model.predict(
+            val_image_paths,
+            imgsz=1280,
+            conf=0.01,  # Low confidence threshold to maximize recall
+            iou=0.7,    # NMS IoU threshold
+            verbose=False
+        )
+        
+        # Convert to COCO format
+        coco_predictions = yolo_predictions_to_coco(predictions, val_image_info, score_threshold=0.01)
+        
+        print(f"Generated {len(coco_predictions)} predictions")
+        
+        # 8. Evaluate using our evaluation function
+        print("\nEvaluating predictions...")
+        eval_results = evaluate_coco_predictions('val_split.json', coco_predictions, verbose=True)
+        
+        # 9. Output metrics
+        detection_mAP = eval_results['detection_mAP']
+        classification_mAP = eval_results['classification_mAP']
+        val_score = eval_results['val_score']
+        
+        print(f"\n=== FINAL RESULTS ===")
+        print(f"Detection mAP@0.5: {detection_mAP:.4f}")
+        print(f"Classification mAP@0.5: {classification_mAP:.4f}")
+        print(f"Val Score (0.7*det + 0.3*cls): {val_score:.4f}")
+        
+        # Training metrics from ultralytics
+        train_results = results.results_dict if hasattr(results, 'results_dict') else {}
+        final_epoch = len(results.metrics['train/box_loss']) if hasattr(results, 'metrics') else 100
+        
+        print(f"\nTraining completed in {final_epoch} epochs")
+        print(f"Best model saved to: {best_model_path}")
+        
+        # Output all metrics
+        print(f"\nMETRIC:model=yolov8x")
+        print(f"METRIC:nc={config['nc']}")
+        print(f"METRIC:imgsz=1280")
+        print(f"METRIC:epochs={final_epoch}")
+        print(f"METRIC:detection_mAP={detection_mAP:.4f}")
+        print(f"METRIC:classification_mAP={classification_mAP:.4f}")
+        print(f"METRIC:val_score={val_score:.4f}")
+        print(f"METRIC:predictions_count={len(coco_predictions)}")
+        print(f"METRIC:val_images={len(val_image_info)}")
+        print(f"METRIC:training_success=1")
+        
+        # Save predictions for analysis
+        pred_file = 'yolov8x_baseline_predictions.json'
+        with open(pred_file, 'w') as f:
+            json.dump(coco_predictions, f)
+        print(f"\nPredictions saved to: {pred_file}")
+        
+    except Exception as e:
+        print(f"\nTraining failed with error: {e}")
+        print(f"METRIC:training_success=0")
+        print(f"METRIC:error={str(e)[:100]}")
+        
+        # Still output basic info
+        print(f"METRIC:model=yolov8x")
+        print(f"METRIC:nc={config['nc']}")
+        print(f"METRIC:imgsz=1280")
+        print(f"METRIC:detection_mAP=0.0")
+        print(f"METRIC:classification_mAP=0.0")
+        print(f"METRIC:val_score=0.0")
+        
+        raise e
     
-    all_dirs_exist = all(Path(d).exists() for d in yolo_dirs)
-    print(f"\nYOLO dataset structure: {'✅' if all_dirs_exist else '❌'}")
-    
-    if all_dirs_exist:
-        for d in yolo_dirs:
-            file_count = len(list(Path(d).glob('*')))
-            print(f"  {d}: {file_count} files")
-    
-    # Output metrics
-    print(f"\nMETRIC:train_images={train_count}")
-    print(f"METRIC:val_images={val_count}")
-    print(f"METRIC:val_ratio={val_ratio:.3f}")
-    print(f"METRIC:train_annotations={len(train_data['annotations'])}")
-    print(f"METRIC:val_annotations={len(val_data['annotations'])}")
-    print(f"METRIC:dummy_detection_mAP={results['detection_mAP']:.4f}")
-    print(f"METRIC:dummy_classification_mAP={results['classification_mAP']:.4f}")
-    print(f"METRIC:dummy_val_score={results['val_score']:.4f}")
-    print(f"METRIC:yolo_structure_ready={1 if all_dirs_exist else 0}")
-    
-    print("\n=== Pipeline Setup Complete ===")
-    print("Ready for training experiments!")
+    print("\n=== YOLOv8x Multiclass Baseline Complete ===")
 
 if __name__ == "__main__":
     main()

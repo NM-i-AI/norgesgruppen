@@ -45,5 +45,18 @@
       "utils.py",
       "main.py"
     ]
+  },
+  "4": {
+    "experiment_id": "exp-004",
+    "step": 4,
+    "type": "experiment",
+    "title": "Train YOLOv8x multiclass (nc=356) baseline at imgsz=1280",
+    "status": "FAILED",
+    "metrics": {},
+    "timestamp": "2026-03-21T11:04:52.046907+00:00",
+    "error": "AttributeError: module 'torch.serialization' has no attribute 'DEFAULT_WEIGHTS_ONLY'",
+    "files_modified": [
+      "main.py"
+    ]
   }
 }

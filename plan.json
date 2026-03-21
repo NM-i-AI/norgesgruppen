@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-10-55",
   "created_at": "2026-03-21T10:55:21.282610+00:00",
   "revision": 2,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "A reliable evaluation function is essential before any experiments",
       "description": "Write utils.py with: (1) Create 90/10 stratified train/val split with seed=42 (save as train_split.json and val_split.json in COCO format). (2) COCO evaluation function computing detection_mAP@0.5 (all cats mapped to one class) and classification_mAP@0.5 (original categories), returning val_score = 0.7*det + 0.3*cls using pycocotools COCOeval. (3) Helper to convert YOLO predictions to COCO format. (4) Also create YOLO-format label directories for train/val splits. Verify everything works with a dummy prediction.",
       "success_criteria": "Split created with ~223 train / ~25 val images. Evaluation function runs without errors on dummy predictions.",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,
