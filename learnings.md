@@ -32,3 +32,11 @@
 - Result: AttributeError - torch.serialization module has no attribute 'DEFAULT_WEIGHTS_ONLY'
 - Side effects: None (failed before training started)
 - Takeaway: The torch version being used doesn't support the DEFAULT_WEIGHTS_ONLY attribute, need to remove or conditionally handle this torch serialization setting.
+
+## Experiment 5 — Train YOLOv8x single-class detector (nc=1) at imgsz=1280
+- Status: FAILED
+- Hypothesis: A single-class detector achieves higher detection mAP since it doesn't need to distinguish 356 classes, and detection is weighted 70%
+- Change: Modified main.py to train YOLOv8x as single-class detector (nc=1), converted all labels to class 0, created data_single_class.yaml
+- Result: CUDA out of memory error during training - tried to allocate 682 MiB but only 216 MiB available
+- Side effects: GPU memory exhaustion prevented any training progress
+- Takeaway: YOLOv8x at imgsz=1280 exceeds available GPU memory regardless of class count, need smaller model or image size.

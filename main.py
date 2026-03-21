@@ -3,9 +3,19 @@ import yaml
 from pathlib import Path
 import torch
 
-# Set weights_only=False for ultralytics compatibility
-torch.serialization.add_safe_globals(['torch.nn.modules.container.ModuleList'])
+# Fix for PyTorch 2.6 weights_only issue with ultralytics models
+# Monkey patch torch.load to use weights_only=False for ultralytics compatibility
+original_torch_load = torch.load
 
+def patched_torch_load(f, map_location=None, pickle_module=None, **kwargs):
+    # Force weights_only=False for ultralytics compatibility
+    kwargs['weights_only'] = False
+    return original_torch_load(f, map_location=map_location, pickle_module=pickle_module, **kwargs)
+
+# Apply the patch
+torch.load = patched_torch_load
+
+# Import ultralytics after patching torch.load
 from ultralytics import YOLO
 from utils import (
     create_train_val_split, 
@@ -16,7 +26,7 @@ from utils import (
 )
 
 def main():
-    print("=== Training YOLOv8x Multiclass Baseline ===")
+    print("=== Training YOLOv8x Single-Class Detector ===")
     
     # 1. Verify splits exist
     if not Path('train_split.json').exists() or not Path('val_split.json').exists():
@@ -34,43 +44,71 @@ def main():
         print("Setting up YOLO dataset structure...")
         setup_yolo_dataset_structure()
     
-    # 3. Create YAML config for multiclass training
+    # 3. Create single-class YOLO labels (convert all categories to class 0)
+    print("Creating single-class YOLO labels...")
+    
+    # Load train and val splits
+    with open('train_split.json', 'r') as f:
+        train_data = json.load(f)
+    with open('val_split.json', 'r') as f:
+        val_data = json.load(f)
+    
+    # Create single-class labels for train
+    train_labels_dir = Path('datasets/train/labels')
+    for img_info in train_data['images']:
+        label_file = train_labels_dir / (Path(img_info['file_name']).stem + '.txt')
+        if label_file.exists():
+            # Read existing labels and convert all classes to 0
+            with open(label_file, 'r') as f:
+                lines = f.readlines()
+            
+            with open(label_file, 'w') as f:
+                for line in lines:
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        # Change class to 0, keep bbox coordinates
+                        f.write(f"0 {' '.join(parts[1:])}\n")
+    
+    # Create single-class labels for val
+    val_labels_dir = Path('datasets/val/labels')
+    for img_info in val_data['images']:
+        label_file = val_labels_dir / (Path(img_info['file_name']).stem + '.txt')
+        if label_file.exists():
+            # Read existing labels and convert all classes to 0
+            with open(label_file, 'r') as f:
+                lines = f.readlines()
+            
+            with open(label_file, 'w') as f:
+                for line in lines:
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        # Change class to 0, keep bbox coordinates
+                        f.write(f"0 {' '.join(parts[1:])}\n")
+    
+    print("Single-class labels created")
+    
+    # 4. Create YAML config for single-class training
     config = {
         'path': str(Path.cwd() / 'datasets'),
         'train': 'train/images',
         'val': 'val/images',
-        'nc': 356,  # Number of classes (0-355)
-        'names': {}
+        'nc': 1,  # Single class
+        'names': {0: 'product'}
     }
     
-    # Load category names from annotations
-    with open('data/train/annotations.json', 'r') as f:
-        coco_data = json.load(f)
-    
-    for cat in coco_data['categories']:
-        config['names'][cat['id']] = cat['name']
-    
     # Save config
-    config_path = 'data_multiclass.yaml'
+    config_path = 'data_single_class.yaml'
     with open(config_path, 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
     
     print(f"Created config: {config_path}")
-    print(f"  Classes: {config['nc']}")
+    print(f"  Classes: {config['nc']} (single class)")
     print(f"  Train path: {config['path']}/{config['train']}")
     print(f"  Val path: {config['path']}/{config['val']}")
     
-    # 4. Initialize YOLOv8x model with weights_only=False
+    # 5. Initialize YOLOv8x model
     print("\nInitializing YOLOv8x model...")
-    
-    # Temporarily disable weights_only for YOLO model loading
-    original_weights_only = torch.serialization.DEFAULT_WEIGHTS_ONLY
-    torch.serialization.DEFAULT_WEIGHTS_ONLY = False
-    
-    try:
-        model = YOLO('yolov8x.pt')  # Load pretrained weights
-    finally:
-        torch.serialization.DEFAULT_WEIGHTS_ONLY = original_weights_only
+    model = YOLO('yolov8x.pt')  # Load pretrained weights
     
     # Check GPU availability
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -79,11 +117,11 @@ def main():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     
-    # 5. Train model
+    # 6. Train model
     print("\nStarting training...")
     print(f"Configuration:")
     print(f"  Model: YOLOv8x")
-    print(f"  Classes: {config['nc']}")
+    print(f"  Classes: {config['nc']} (single class detector)")
     print(f"  Image size: 1280")
     print(f"  Epochs: 100")
     print(f"  Device: {device}")
@@ -96,7 +134,7 @@ def main():
             batch=4,  # Conservative batch size for 1280 resolution
             device=device,
             project='runs/train',
-            name='yolov8x_multiclass_baseline',
+            name='yolov8x_single_class',
             save_period=25,  # Save checkpoint every 25 epochs
             patience=50,  # Early stopping patience
             close_mosaic=50,  # Close mosaic augmentation after 50 epochs
@@ -105,24 +143,16 @@ def main():
         
         print("\nTraining completed successfully!")
         
-        # 6. Load best model for evaluation
+        # 7. Load best model for evaluation
         best_model_path = results.save_dir / 'weights' / 'best.pt'
         print(f"\nLoading best model: {best_model_path}")
         
-        # Load best model with weights_only=False
-        torch.serialization.DEFAULT_WEIGHTS_ONLY = False
-        try:
-            best_model = YOLO(best_model_path)
-        finally:
-            torch.serialization.DEFAULT_WEIGHTS_ONLY = original_weights_only
+        best_model = YOLO(best_model_path)
         
-        # 7. Run inference on validation set
+        # 8. Run inference on validation set
         print("\nRunning inference on validation set...")
         
         # Load val split info
-        with open('val_split.json', 'r') as f:
-            val_data = json.load(f)
-        
         val_image_info = []
         val_image_paths = []
         
@@ -143,27 +173,26 @@ def main():
             verbose=False
         )
         
-        # Convert to COCO format
+        # Convert to COCO format (all predictions will have category_id=0)
         coco_predictions = yolo_predictions_to_coco(predictions, val_image_info, score_threshold=0.01)
         
         print(f"Generated {len(coco_predictions)} predictions")
         
-        # 8. Evaluate using our evaluation function
+        # 9. Evaluate using our evaluation function
         print("\nEvaluating predictions...")
         eval_results = evaluate_coco_predictions('val_split.json', coco_predictions, verbose=True)
         
-        # 9. Output metrics
+        # 10. Output metrics
         detection_mAP = eval_results['detection_mAP']
         classification_mAP = eval_results['classification_mAP']
         val_score = eval_results['val_score']
         
         print(f"\n=== FINAL RESULTS ===")
         print(f"Detection mAP@0.5: {detection_mAP:.4f}")
-        print(f"Classification mAP@0.5: {classification_mAP:.4f}")
+        print(f"Classification mAP@0.5: {classification_mAP:.4f} (expected 0.0 for single-class)")
         print(f"Val Score (0.7*det + 0.3*cls): {val_score:.4f}")
         
         # Training metrics from ultralytics
-        train_results = results.results_dict if hasattr(results, 'results_dict') else {}
         final_epoch = len(results.metrics['train/box_loss']) if hasattr(results, 'metrics') else 100
         
         print(f"\nTraining completed in {final_epoch} epochs")
@@ -171,7 +200,7 @@ def main():
         
         # Output all metrics
         print(f"\nMETRIC:model=yolov8x")
-        print(f"METRIC:nc={config['nc']}")
+        print(f"METRIC:nc=1")
         print(f"METRIC:imgsz=1280")
         print(f"METRIC:epochs={final_epoch}")
         print(f"METRIC:detection_mAP={detection_mAP:.4f}")
@@ -182,7 +211,7 @@ def main():
         print(f"METRIC:training_success=1")
         
         # Save predictions for analysis
-        pred_file = 'yolov8x_baseline_predictions.json'
+        pred_file = 'yolov8x_single_class_predictions.json'
         with open(pred_file, 'w') as f:
             json.dump(coco_predictions, f)
         print(f"\nPredictions saved to: {pred_file}")
@@ -194,7 +223,7 @@ def main():
         
         # Still output basic info
         print(f"METRIC:model=yolov8x")
-        print(f"METRIC:nc={config['nc']}")
+        print(f"METRIC:nc=1")
         print(f"METRIC:imgsz=1280")
         print(f"METRIC:detection_mAP=0.0")
         print(f"METRIC:classification_mAP=0.0")
@@ -202,7 +231,7 @@ def main():
         
         raise e
     
-    print("\n=== YOLOv8x Multiclass Baseline Complete ===")
+    print("\n=== YOLOv8x Single-Class Detector Complete ===")
 
 if __name__ == "__main__":
     main()
