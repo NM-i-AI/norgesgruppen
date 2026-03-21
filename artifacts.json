@@ -10,5 +10,17 @@
     "files_modified": [
       "scratch.py"
     ]
+  },
+  "2": {
+    "experiment_id": "exp-002",
+    "step": 2,
+    "type": "exploration",
+    "title": "Deep dive: data, splits, products, existing models, and environment",
+    "status": "EXPLORE",
+    "metrics": {},
+    "timestamp": "2026-03-21T10:59:05.591864+00:00",
+    "files_modified": [
+      "scratch.py"
+    ]
   }
 }

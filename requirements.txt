@@ -1,0 +1,13 @@
+torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124
+ultralytics==8.1.0
+timm==0.9.12
+pycocotools
+ensemble-boxes
+supervision
+albumentations
+opencv-python-headless
+numpy
+scipy
+scikit-learn
+safetensors
