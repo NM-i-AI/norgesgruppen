@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
   "revision": 5,
-  "current_step": 13,
+  "current_step": 14,
   "plan": [
     {
       "step": 1,
@@ -131,8 +131,8 @@
       "hypothesis": "Combining the best single-class detector with DINOv2 classification yields higher val_score than multiclass YOLO alone.",
       "description": "Use nc=1 detector boxes, crop from original image, classify via DINOv2 kNN. Compute full val_score. Tune conf threshold and NMS parameters.",
       "success_criteria": "val_score exceeds best multiclass YOLO result",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-013"
     },
     {
       "step": 14,
