@@ -105,5 +105,21 @@
     "files_modified": [
       "main.py"
     ]
+  },
+  "8": {
+    "experiment_id": "exp-008",
+    "step": 8,
+    "type": "experiment",
+    "title": "Fix batch size and category mapping, train YOLOv8m nc=356 at 640px, 30 epochs",
+    "status": "REGRESS",
+    "metrics": {
+      "val_score": 0.0,
+      "training_success": 0.0,
+      "training_failed": 1.0
+    },
+    "timestamp": "2026-03-21T11:45:55.151525+00:00",
+    "files_modified": [
+      "main.py"
+    ]
   }
 }

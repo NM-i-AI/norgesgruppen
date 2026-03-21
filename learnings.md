@@ -56,3 +56,11 @@
 - Result: CUDA OOM error during training - tried to allocate 572 MiB but only 460 MiB free, despite AutoBatch suggesting batch size 122.
 - Side effects: Dataset preparation was successful (labels cached properly), but AutoBatch calculation appears unreliable for actual training memory requirements.
 - Takeaway: Even YOLOv8m with AutoBatch optimization still hits OOM, so we need to either use a smaller model (YOLOv8s/n) or manually set a much smaller batch size.
+
+## Experiment 8 — Fix batch size and category mapping, train YOLOv8m nc=356 at 640px, 30 epochs
+- Status: FAILED
+- Hypothesis: Setting batch=8 explicitly (instead of AutoBatch) and fixing category_id to 0-indexed YOLO format will allow YOLOv8m training to complete successfully.
+- Change: Set batch=8 explicitly, added category mapping from COCO IDs to 0-indexed range, cleaned up stale dataset directory
+- Result: Training failed due to numpy compatibility issue - `numpy.trapz` function was removed in newer numpy versions
+- Side effects: Model loaded successfully and began training before hitting the numpy error during validation
+- Takeaway: The batch size and category mapping fixes worked, but ultralytics has a dependency issue with newer numpy versions that removes the `trapz` function.
