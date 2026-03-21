@@ -88,3 +88,11 @@
 - Result: val_score 0.5752 → 0.5843 (+0.0091, +1.6%), detection_map improved to 0.8347
 - Side effects: Training time increased to 599s (~10 minutes), memory usage required batch size reduction to 2, significantly longer per-epoch time due to higher resolution
 - Takeaway: Scaling up model size and resolution provides marginal improvement (+1.6%) but at substantial computational cost, suggesting diminishing returns from this approach.
+
+## Experiment 12 — DINOv2 embedding gallery + kNN classification on GT crops
+- Status: FAILED
+- Hypothesis: DINOv2 embeddings from reference product images enable kNN classification that handles 356 categories better than YOLO's classification head
+- Change: Added DINOv2-base model loading, reference image gallery building from data/products/, feature extraction from GT crops, and kNN classification with multiple k values
+- Result: Experiment failed during reference gallery building - no reference embeddings were extracted from product images
+- Side effects: None observed due to early failure
+- Takeaway: The reference gallery building failed, likely due to missing or inaccessible product images in data/products/ directory that need to be verified before proceeding with DINOv2 experiments.
