@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
   "revision": 5,
-  "current_step": 12,
+  "current_step": 13,
   "plan": [
     {
       "step": 1,
@@ -121,8 +121,8 @@
       "hypothesis": "DINOv2 embeddings from reference product images enable kNN classification that handles 356 categories better than YOLO's classification head.",
       "description": "Build DINOv2-base embedding gallery from data/products/ reference images. Test kNN classification on val split using GT boxes to measure classification quality in isolation.",
       "success_criteria": "kNN classification accuracy on GT crops exceeds 30% top-1 accuracy",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-012"
     },
     {
       "step": 13,

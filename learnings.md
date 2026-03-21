@@ -96,3 +96,11 @@
 - Result: Experiment failed during reference gallery building - no reference embeddings were extracted from product images
 - Side effects: None observed due to early failure
 - Takeaway: The reference gallery building failed, likely due to missing or inaccessible product images in data/products/ directory that need to be verified before proceeding with DINOv2 experiments.
+
+## Experiment 13 — Two-stage pipeline: best detector + DINOv2 kNN classifier
+- Status: FAILED
+- Hypothesis: Combining the best single-class detector with DINOv2 classification yields higher val_score than multiclass YOLO alone
+- Change: Implemented complete two-stage pipeline with single-class YOLO detector and DINOv2 kNN classifier, including reference gallery building and confidence threshold tuning
+- Result: val_score 0.5843 → 0.0 (experiment failed during reference gallery building)
+- Side effects: Pipeline failed before reaching inference stage, no performance data available
+- Takeaway: The reference gallery building step failed to extract any embeddings, likely due to image loading or preprocessing issues that need debugging before the two-stage approach can be evaluated.

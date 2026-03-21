@@ -205,5 +205,20 @@
       "main.py",
       "requirements.txt"
     ]
+  },
+  "13": {
+    "experiment_id": "exp-013",
+    "step": 13,
+    "type": "experiment",
+    "title": "Two-stage pipeline: best detector + DINOv2 kNN classifier",
+    "status": "REGRESS",
+    "metrics": {
+      "val_score": 0.0,
+      "experiment_failed": 1.0
+    },
+    "timestamp": "2026-03-21T12:16:02.986719+00:00",
+    "files_modified": [
+      "main.py"
+    ]
   }
 }
