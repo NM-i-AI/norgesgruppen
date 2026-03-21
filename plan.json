@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-10-25",
   "created_at": "2026-03-21T10:25:20.816153+00:00",
   "revision": 2,
-  "current_step": 4,
+  "current_step": 5,
   "plan": [
     {
       "step": 1,
@@ -41,8 +41,8 @@
       "hypothesis": "YOLOv8m with 356 classes at 640px provides a reasonable starting baseline. Medium model balances capacity and training speed.",
       "description": "Train YOLOv8m on train split with nc=356, imgsz=640, 80 epochs, default augmentation, batch=16. Evaluate on val split using our evaluation function. Record val_score, detection_mAP, classification_mAP.",
       "success_criteria": "Model trains successfully and produces a non-trivial val_score (>0.05).",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-004"
     },
     {
       "step": 5,

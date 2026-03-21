@@ -32,3 +32,11 @@
 - Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading pretrained weights
 - Side effects: Model architecture loaded successfully (26M parameters, 80.2 GFLOPs) before failing at weight loading
 - Takeaway: Need to handle PyTorch 2.6's new weights_only=True default by either setting weights_only=False or using safe_globals context manager for YOLO model loading.
+
+## Experiment 5 — YOLOv8x multi-class at 1280
+- Status: FAILED
+- Hypothesis: Larger model + higher resolution will improve both detection and classification on shelf images
+- Change: Upgraded from YOLOv8m to YOLOv8x, increased resolution from 640px to 1280px, added auto-batch sizing and AMP
+- Result: Training failed due to PyTorch 2.6 weights_only security restriction when loading pretrained YOLOv8x weights
+- Side effects: Model successfully loaded (68M parameters, 260 GFLOPs) but crashed during weight transfer from pretrained checkpoint
+- Takeaway: Need to add torch.serialization.safe_globals or set weights_only=False to load YOLOv8x pretrained weights in PyTorch 2.6+.

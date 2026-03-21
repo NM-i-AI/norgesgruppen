@@ -8,9 +8,9 @@ from utils import evaluate_predictions, load_coco_split
 from ultralytics import YOLO
 import torch
 
-def train_yolov8m_baseline():
-    """Train YOLOv8m baseline with 356 classes at 640px resolution."""
-    print("=== Training YOLOv8m Baseline ===")
+def train_yolov8x_1280():
+    """Train YOLOv8x with 356 classes at 1280px resolution."""
+    print("=== Training YOLOv8x at 1280px ===")
     
     # Check if splits exist
     data_path = Path("data")
@@ -38,8 +38,7 @@ def train_yolov8m_baseline():
     print(f"Categories in training data: {len(train_categories)} (range: {min(train_categories)}-{max(train_categories)})")
     
     # Create custom data.yaml for this experiment
-    # We need to specify which images to use for train vs val
-    yaml_content = f"""# YOLOv8m baseline experiment
+    yaml_content = f"""# YOLOv8x 1280px experiment
 path: {data_path.absolute()}
 train: train/images
 val: train/images
@@ -48,12 +47,12 @@ nc: {len(train_categories)}
 names: {list(range(len(train_categories)))}
 """
     
-    yaml_path = data_path / "yolov8m_baseline.yaml"
+    yaml_path = data_path / "yolov8x_1280.yaml"
     with open(yaml_path, 'w') as f:
         f.write(yaml_content)
     
     # Create filtered YOLO labels for this split
-    labels_dir = data_path / "labels_baseline"
+    labels_dir = data_path / "labels_yolov8x_1280"
     labels_dir.mkdir(exist_ok=True)
     
     # Convert train split to YOLO labels
@@ -114,10 +113,10 @@ names: {list(range(len(train_categories)))}
     print(f"Created YOLO labels in {labels_dir}")
     
     # Update yaml to point to our custom labels
-    yaml_content = f"""# YOLOv8m baseline experiment
+    yaml_content = f"""# YOLOv8x 1280px experiment
 path: {data_path.absolute()}
-train: labels_baseline/train
-val: labels_baseline/val
+train: labels_yolov8x_1280/train
+val: labels_yolov8x_1280/val
 
 nc: {len(train_categories)}
 names: {list(range(len(train_categories)))}
@@ -126,7 +125,7 @@ names: {list(range(len(train_categories)))}
     with open(yaml_path, 'w') as f:
         f.write(yaml_content)
     
-    # Initialize YOLOv8m model with weights_only=False workaround
+    # Initialize YOLOv8x model with weights_only=False workaround
     try:
         # Try to set torch.load to use weights_only=False globally
         import torch.serialization
@@ -139,51 +138,72 @@ names: {list(range(len(train_categories)))}
         
         torch.load = patched_load
         
-        model = YOLO('yolov8m.pt')
+        model = YOLO('yolov8x.pt')
         
         # Restore original torch.load
         torch.load = original_load
         
     except Exception as e:
-        print(f"Error loading YOLOv8m model: {e}")
+        print(f"Error loading YOLOv8x model: {e}")
         print("Trying alternative approach...")
         
         # Alternative: try creating model from scratch
         try:
-            model = YOLO('yolov8m.yaml')  # Load architecture only
+            model = YOLO('yolov8x.yaml')  # Load architecture only
         except Exception as e2:
             print(f"Failed to create model from yaml: {e2}")
             print("METRIC:val_score=0.0000")
             print("METRIC:training_failed=1")
             return
     
+    # Auto-adjust batch size based on GPU memory
+    # YOLOv8x at 1280px is memory intensive
+    if torch.cuda.is_available():
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+        print(f"GPU memory: {gpu_memory:.1f} GB")
+        
+        # Conservative batch size for YOLOv8x at 1280px
+        if gpu_memory >= 80:  # A800 80GB
+            batch_size = 8
+        elif gpu_memory >= 40:
+            batch_size = 4
+        elif gpu_memory >= 24:
+            batch_size = 2
+        else:
+            batch_size = 1
+    else:
+        batch_size = 1
+    
     print(f"\nStarting training...")
-    print(f"Model: YOLOv8m")
+    print(f"Model: YOLOv8x")
     print(f"Classes: {len(train_categories)}")
-    print(f"Image size: 640")
-    print(f"Epochs: 80")
-    print(f"Batch size: 16")
+    print(f"Image size: 1280")
+    print(f"Epochs: 100")
+    print(f"Batch size: {batch_size}")
     
     # Train the model
     try:
         results = model.train(
             data=str(yaml_path),
-            epochs=80,
-            imgsz=640,
-            batch=16,
+            epochs=100,
+            imgsz=1280,
+            batch=batch_size,
             device='0',  # Use first GPU
             project='runs/detect',
-            name='yolov8m_baseline',
+            name='yolov8x_1280',
             save=True,
-            save_period=20,  # Save every 20 epochs
-            patience=30,  # Early stopping patience
-            verbose=True
+            save_period=25,  # Save every 25 epochs
+            patience=40,  # Early stopping patience
+            verbose=True,
+            close_mosaic=50,  # Close mosaic augmentation after 50 epochs
+            amp=True,  # Automatic mixed precision
+            workers=8  # Data loading workers
         )
         
         print(f"\nTraining completed successfully!")
         
         # Load best model for evaluation
-        best_model_path = Path('runs/detect/yolov8m_baseline/weights/best.pt')
+        best_model_path = Path('runs/detect/yolov8x_1280/weights/best.pt')
         if best_model_path.exists():
             # Use the same patched loading for the trained model
             try:
@@ -236,8 +256,8 @@ names: {list(range(len(train_categories)))}
                 print(f"Warning: Could not extract image_id from {img_filename}")
                 continue
             
-            # Run inference
-            results = model(img_path, verbose=False)
+            # Run inference with higher confidence threshold for cleaner results
+            results = model(img_path, verbose=False, conf=0.1, iou=0.7)
             
             # Convert results to COCO format
             for result in results:
@@ -276,10 +296,10 @@ names: {list(range(len(train_categories)))}
             print(f"METRIC:detection_map={det_map:.4f}")
             print(f"METRIC:classification_map={cls_map:.4f}")
             print(f"METRIC:num_predictions={len(predictions)}")
-            print(f"METRIC:model_type=yolov8m")
-            print(f"METRIC:image_size=640")
-            print(f"METRIC:epochs=80")
-            print(f"METRIC:batch_size=16")
+            print(f"METRIC:model_type=yolov8x")
+            print(f"METRIC:image_size=1280")
+            print(f"METRIC:epochs=100")
+            print(f"METRIC:batch_size={batch_size}")
             
         else:
             print("\nError: No predictions generated")
@@ -301,20 +321,23 @@ names: {list(range(len(train_categories)))}
 
 def main():
     """Main training pipeline."""
-    print("=== YOLOv8m Baseline Training ===")
+    print("=== YOLOv8x 1280px Training ===")
     
     # Check GPU availability
     if torch.cuda.is_available():
         print(f"CUDA available: {torch.cuda.device_count()} GPUs")
+        for i in range(torch.cuda.device_count()):
+            print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+            props = torch.cuda.get_device_properties(i)
+            print(f"  Memory: {props.total_memory / 1024**3:.1f} GB")
         print(f"Current device: {torch.cuda.current_device()}")
-        print(f"Device name: {torch.cuda.get_device_name()}")
     else:
         print("Warning: CUDA not available, using CPU")
     
-    # Train baseline model
-    train_yolov8m_baseline()
+    # Train YOLOv8x at 1280px
+    train_yolov8x_1280()
     
-    print("\n=== Baseline Training Complete ===")
+    print("\n=== YOLOv8x 1280px Training Complete ===")
 
 if __name__ == "__main__":
     main()
