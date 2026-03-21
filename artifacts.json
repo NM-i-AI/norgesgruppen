@@ -10,5 +10,18 @@
     "files_modified": [
       "scratch.py"
     ]
+  },
+  "2": {
+    "experiment_id": "exp-002",
+    "step": 2,
+    "type": "exploration",
+    "title": "Verify environment, GPU, packages, and existing artifacts",
+    "status": "EXPLORE",
+    "metrics": {},
+    "timestamp": "2026-03-21T11:35:24.856997+00:00",
+    "files_modified": [
+      "scratch.py",
+      "requirements.txt"
+    ]
   }
 }

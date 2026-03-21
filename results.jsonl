@@ -1,1 +1,2 @@
 {"experiment_id": "exp-001", "step": 1, "type": "exploration", "title": "Explore workspace structure and existing artifacts", "status": "EXPLORE", "metrics": {}, "duration_seconds": 0.2, "timestamp": "2026-03-21T11:32:37.171781+00:00", "fix_attempts": 2}
+{"experiment_id": "exp-002", "step": 2, "type": "exploration", "title": "Verify environment, GPU, packages, and existing artifacts", "status": "EXPLORE", "metrics": {}, "duration_seconds": 67.5, "timestamp": "2026-03-21T11:35:24.856813+00:00"}
