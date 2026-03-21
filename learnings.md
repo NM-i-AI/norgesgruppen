@@ -16,3 +16,11 @@
 - Result: Found 248 images with 22,731 annotations across 356 categories and 344 products, but no train/val splits exist and no pre-trained models available
 - Side effects: Long execution time (84s) for comprehensive analysis
 - Takeaway: Dataset is ready for training but requires creating train/val splits and training from scratch since no existing models are available.
+
+## Experiment 3 — Build evaluation pipeline and create 90/10 train/val split
+- Status: SUCCESS
+- Hypothesis: A reliable evaluation function is essential before any experiments
+- Change: Built comprehensive evaluation pipeline with stratified 90/10 train/val split, COCO evaluation functions, and YOLO dataset structure
+- Result: Successfully created train (224 images, 20345 annotations) and val (24 images, 2386 annotations) splits with 9.7% validation ratio
+- Side effects: Minor numpy warning in evaluation pipeline that needs fixing, but doesn't affect functionality
+- Takeaway: Evaluation infrastructure is ready for experiments, though the numpy error in classification evaluation should be addressed before running real predictions.
