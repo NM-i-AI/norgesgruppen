@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-10-25",
   "created_at": "2026-03-21T10:25:20.816153+00:00",
   "revision": 2,
-  "current_step": 5,
+  "current_step": 6,
   "plan": [
     {
       "step": 1,
@@ -51,8 +51,8 @@
       "hypothesis": "Larger model + higher resolution will improve both detection and classification on shelf images, even though most objects are large.",
       "description": "Train YOLOv8x nc=356, imgsz=1280, 100 epochs, batch size auto-adjusted for GPU memory. Compare val_score to step 4 baseline.",
       "success_criteria": "val_score improves over step 4 baseline.",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-005"
     },
     {
       "step": 6,
