@@ -32,3 +32,11 @@
 - Result: All functions working correctly - evaluation_function_success=1.0, yolo_dataset_success=1.0, dummy validation produces expected low scores (val_score=0.0277, detection_mAP=0.0295, classification_mAP=0.0234)
 - Side effects: Added pycocotools dependency, evaluation takes ~10 seconds due to COCO API overhead
 - Takeaway: Core evaluation infrastructure is ready and validated - can now proceed with baseline model training and systematic experiments.
+
+## Experiment 5 — Baseline: YOLOv8x multiclass (nc=356) at 1280px, 50 epochs
+- Status: FAILED
+- Hypothesis: YOLOv8x at 1280px gives a strong multiclass baseline with 50 epochs for quick feedback
+- Change: Implemented YOLOv8x training with nc=356 classes at 1280px resolution, batch size auto-selected as 4
+- Result: Training failed due to CUDA out of memory error during first epoch (0.0 val_score, training_failed=1.0)
+- Side effects: Memory usage exceeded 65GB on 80GB GPU, indicating very high memory requirements
+- Takeaway: YOLOv8x at 1280px is too memory-intensive even with batch size 4; need to reduce model size or image resolution.

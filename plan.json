@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
   "revision": 2,
-  "current_step": 4,
+  "current_step": 5,
   "plan": [
     {
       "step": 1,
@@ -41,8 +41,8 @@
       "hypothesis": "A correct evaluation function matching the competition metric (0.7*detection_mAP@0.5 + 0.3*classification_mAP@0.5) is critical for reliable experiment comparison.",
       "description": "Write evaluation function in utils.py using pycocotools that: (1) loads val annotations, (2) accepts predictions in COCO format, (3) computes detection_mAP@0.5 (single class) and classification_mAP@0.5 (per category), (4) returns combined val_score. Also prepare the YOLO dataset YAML file with proper paths and class names. Test eval function with dummy predictions.",
       "success_criteria": "Evaluation function runs without errors on dummy data and produces reasonable mAP values.",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-004"
     },
     {
       "step": 5,
