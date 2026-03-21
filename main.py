@@ -18,7 +18,7 @@ from pathlib import Path
 from utils import evaluate_model, prepare_yolo_dataset, create_train_val_split, save_coco_split
 
 def main():
-    print("=== YOLOv8x MULTICLASS BASELINE TRAINING ===")
+    print("=== YOLOv8x SINGLE-CLASS DETECTOR TRAINING ===")
     
     try:
         # Step 1: Create train/val split
@@ -37,56 +37,75 @@ def main():
         
         print(f"✓ Split created: {len(train_image_ids)} train, {len(val_image_ids)} val images")
         
-        # Save splits
+        # Step 2: Create single-class annotations
+        print("\n2. Converting to single-class annotations...")
+        
+        # Convert all annotations to class 0 (single product class)
+        single_class_coco = coco_data.copy()
+        single_class_coco['categories'] = [{'id': 0, 'name': 'product'}]
+        
+        # Map all annotations to class 0
+        for ann in single_class_coco['annotations']:
+            ann['category_id'] = 0
+        
+        print(f"✓ Converted {len(single_class_coco['annotations'])} annotations to single class")
+        
+        # Save splits with single-class annotations
         train_count, train_ann_count = save_coco_split(
-            coco_data, train_image_ids, "train_split.json"
+            single_class_coco, train_image_ids, "train_split_nc1.json"
         )
         val_count, val_ann_count = save_coco_split(
-            coco_data, val_image_ids, "val_split.json"
+            single_class_coco, val_image_ids, "val_split_nc1.json"
         )
         
         print(f"✓ Train split: {train_count} images, {train_ann_count} annotations")
         print(f"✓ Val split: {val_count} images, {val_ann_count} annotations")
         
-        # Step 2: Prepare YOLO dataset YAML
-        print("\n2. Preparing YOLO dataset configuration...")
-        yaml_path = prepare_yolo_dataset()
+        # Step 3: Prepare YOLO dataset YAML for single class
+        print("\n3. Preparing single-class YOLO dataset configuration...")
         
-        # Update YAML to use our splits
+        # Create single-class YOLO config
+        yolo_config = {
+            'path': str(data_dir.absolute()),
+            'train': 'train/images',
+            'val': 'train/images',
+            'nc': 1,
+            'names': {0: 'product'}
+        }
+        
+        yaml_path = Path("grocery_dataset_nc1.yaml")
         import yaml
-        with open(yaml_path, 'r') as f:
-            yolo_config = yaml.safe_load(f)
+        with open(yaml_path, 'w') as f:
+            yaml.dump(yolo_config, f, default_flow_style=False)
         
-        # For now, we'll use the same images directory but YOLO will use all images
-        # We'll evaluate only on our val split manually
         print(f"✓ YOLO dataset config: {yaml_path}")
-        print(f"✓ Number of classes: {yolo_config['nc']}")
+        print(f"✓ Number of classes: {yolo_config['nc']} (single product class)")
         
-        # Step 3: Initialize YOLOv8x model
-        print("\n3. Initializing YOLOv8x model...")
+        # Step 4: Initialize YOLOv8x model
+        print("\n4. Initializing YOLOv8x model...")
         model = YOLO('yolov8x.pt')  # This will download pretrained weights
         print(f"✓ YOLOv8x model loaded")
         
-        # Step 4: Train the model
-        print("\n4. Starting training...")
+        # Step 5: Train the model
+        print("\n5. Starting single-class training...")
         print(f"Training parameters:")
         print(f"  - Model: YOLOv8x")
-        print(f"  - Classes: {yolo_config['nc']} (nc=356, categories 0-355)")
+        print(f"  - Classes: 1 (nc=1, single product class)")
         print(f"  - Image size: 1280")
         print(f"  - Epochs: 50")
         print(f"  - Close mosaic: 10")
-        print(f"  - Batch: auto")
+        print(f"  - Batch: auto (should be larger than nc=356 case)")
         
         # Train with specified parameters
         results = model.train(
-            data=yaml_path,
+            data=str(yaml_path),
             epochs=50,
             imgsz=1280,
-            batch=-1,  # auto batch size
+            batch=-1,  # auto batch size (should be larger for nc=1)
             close_mosaic=10,
             device=0,  # Use first GPU
             project="runs/detect",
-            name="yolov8x_baseline",
+            name="yolov8x_nc1",
             save=True,
             save_period=10,  # Save every 10 epochs
             val=True,
@@ -96,14 +115,14 @@ def main():
         
         print(f"✓ Training completed")
         
-        # Step 5: Load best model and run inference on validation set
-        print("\n5. Evaluating on validation split...")
+        # Step 6: Load best model and run inference on validation set
+        print("\n6. Evaluating on validation split...")
         
         # Load the best model from training
-        best_model_path = Path("runs/detect/yolov8x_baseline/weights/best.pt")
+        best_model_path = Path("runs/detect/yolov8x_nc1/weights/best.pt")
         if not best_model_path.exists():
             # Fallback to last.pt if best.pt doesn't exist
-            best_model_path = Path("runs/detect/yolov8x_baseline/weights/last.pt")
+            best_model_path = Path("runs/detect/yolov8x_nc1/weights/last.pt")
         
         eval_model = YOLO(str(best_model_path))
         print(f"✓ Loaded model: {best_model_path}")
@@ -113,7 +132,7 @@ def main():
         images_dir = data_dir / "train" / "images"
         
         # Load val split to get image filenames
-        with open("val_split.json", 'r') as f:
+        with open("val_split_nc1.json", 'r') as f:
             val_data = json.load(f)
         
         val_image_files = {img['id']: img['file_name'] for img in val_data['images']}
@@ -136,13 +155,13 @@ def main():
                         x1, y1, x2, y2 = xyxy
                         bbox = [float(x1), float(y1), float(x2 - x1), float(y2 - y1)]
                         
-                        # Get class and confidence
+                        # Get class and confidence (should all be class 0)
                         cls = int(boxes.cls[i].cpu().numpy())
                         conf = float(boxes.conf[i].cpu().numpy())
                         
                         pred = {
                             'image_id': image_id,
-                            'category_id': cls,
+                            'category_id': cls,  # Should be 0 for all predictions
                             'bbox': bbox,
                             'score': conf
                         }
@@ -150,20 +169,27 @@ def main():
         
         print(f"✓ Generated {len(val_predictions)} predictions")
         
-        # Step 6: Evaluate using our competition metric
-        print("\n6. Computing competition metric...")
+        # Step 7: Evaluate using our competition metric
+        print("\n7. Computing competition metric...")
         
+        # For single-class evaluation, we need to use the original multiclass annotations
+        # to compute detection mAP properly
         val_score, detection_map, classification_map = evaluate_model(
             val_predictions, 
             val_image_ids, 
-            annotations_path
+            annotations_path  # Use original multiclass annotations
         )
         
-        print(f"\n=== BASELINE RESULTS ===")
+        print(f"\n=== SINGLE-CLASS DETECTOR RESULTS ===")
         print(f"Detection mAP@0.5: {detection_map:.4f}")
         print(f"Classification mAP@0.5: {classification_map:.4f}")
         print(f"Combined val_score: {val_score:.4f}")
         print(f"Formula: 0.7 × {detection_map:.4f} + 0.3 × {classification_map:.4f} = {val_score:.4f}")
+        
+        # Note about single-class performance
+        print(f"\nNote: Single-class detector (nc=1) should excel at detection but")
+        print(f"will score 0 on classification since all predictions are category_id=0.")
+        print(f"Maximum possible val_score for nc=1 model: 0.7 × detection_mAP = {0.7 * detection_map:.4f}")
         
         # Output metrics for tracking
         print(f"\nMETRIC:val_score={val_score:.6f}")
@@ -173,13 +199,15 @@ def main():
         print(f"METRIC:training_epochs=50")
         print(f"METRIC:model_size=yolov8x")
         print(f"METRIC:image_size=1280")
+        print(f"METRIC:num_classes=1")
+        print(f"METRIC:max_possible_score={0.7 * detection_map:.6f}")
         
         # Save predictions for analysis
-        with open("baseline_predictions.json", 'w') as f:
+        with open("nc1_predictions.json", 'w') as f:
             json.dump(val_predictions, f)
-        print(f"✓ Predictions saved to baseline_predictions.json")
+        print(f"✓ Predictions saved to nc1_predictions.json")
         
-        print(f"\n=== BASELINE TRAINING COMPLETE ===")
+        print(f"\n=== SINGLE-CLASS TRAINING COMPLETE ===")
         
     except Exception as e:
         print(f"❌ Training failed: {e}")

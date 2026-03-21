@@ -40,3 +40,11 @@
 - Result: Training failed due to CUDA out of memory error during first epoch (0.0 val_score, training_failed=1.0)
 - Side effects: Memory usage exceeded 65GB on 80GB GPU, indicating very high memory requirements
 - Takeaway: YOLOv8x at 1280px is too memory-intensive even with batch size 4; need to reduce model size or image resolution.
+
+## Experiment 6 — Train single-class detector: YOLOv8x nc=1 at 1280px, 50 epochs
+- Status: FAILED
+- Hypothesis: A single-class detector should have higher detection recall since it doesn't need to distinguish 356 categories, and detection is weighted 70% in the score.
+- Change: Modified main.py to train YOLOv8x with nc=1, mapping all 22,731 annotations to class 0
+- Result: Training failed with CUDA device-side assert triggered in TAL (Task-Aligned Learning) module during bbox_scores assignment
+- Side effects: Model loaded successfully and batch size was auto-determined as 4, but crashed during first epoch
+- Takeaway: The single-class mapping likely created invalid label indices that triggered CUDA assertions in the loss computation, requiring proper label validation before training.
