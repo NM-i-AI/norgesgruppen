@@ -80,3 +80,11 @@
 - Result: val_score 0.2812 → 0.5752 (+104% improvement), detection_map=0.8216, classification_map=0.0000 (expected)
 - Side effects: Classification component completely eliminated (0.0 mAP), but overall score doubled due to excellent detection performance
 - Takeaway: Single-class detection strategy is highly effective, achieving 82% detection mAP and doubling the validation score despite losing classification capability.
+
+## Experiment 11 — Scale up best model: YOLOv8l at 640px or YOLOv8m at 1280px, 50 epochs
+- Status: SUCCESS
+- Hypothesis: A larger model or higher resolution with longer training will improve detection quality on dense grocery shelves.
+- Change: Upgraded from YOLOv8s to YOLOv8m, increased resolution from 640px to 1280px, extended training from 30 to 50 epochs, reduced batch size to 2 for memory management, added close_mosaic=10
+- Result: val_score 0.5752 → 0.5843 (+0.0091, +1.6%), detection_map improved to 0.8347
+- Side effects: Training time increased to 599s (~10 minutes), memory usage required batch size reduction to 2, significantly longer per-epoch time due to higher resolution
+- Takeaway: Scaling up model size and resolution provides marginal improvement (+1.6%) but at substantial computational cost, suggesting diminishing returns from this approach.

@@ -206,37 +206,38 @@ def link_images(image_ids, target_dir):
                 shutil.copy2(src_path, dst_path)
 
 def main():
-    print("=== YOLO DATASET PREPARATION AND YOLOv8s nc=1 TRAINING ===")
+    print("=== SCALING UP: YOLOv8m nc=1 at 1280px, 50 epochs ===\n")
     
     try:
         # Step 1: Create YOLO dataset structure for single-class detection
-        print("\n1. Creating YOLO dataset structure for single-class detection...")
+        print("1. Creating YOLO dataset structure for single-class detection...")
         yaml_path, train_image_ids, val_image_ids, category_mapping = create_yolo_dataset_structure()
         print(f"✓ Dataset YAML created: {yaml_path}")
         print(f"✓ Single-class mapping created: all {len(category_mapping)} categories -> class 0")
         
-        # Step 2: Initialize and train YOLOv8s model
-        print("\n2. Initializing YOLOv8s model...")
-        model = YOLO('yolov8s.pt')  # Use small model
-        print("✓ YOLOv8s model loaded")
+        # Step 2: Initialize and train YOLOv8m model
+        print("\n2. Initializing YOLOv8m model...")
+        model = YOLO('yolov8m.pt')  # Use medium model
+        print("✓ YOLOv8m model loaded")
         
-        # Step 3: Train the model with explicit batch size
+        # Step 3: Train the model with higher resolution and longer training
         print("\n3. Starting training...")
-        print(f"Training config: YOLOv8s, nc=1, 640px, 30 epochs, batch=16")
+        print(f"Training config: YOLOv8m, nc=1, 1280px, 50 epochs, batch=2, close_mosaic=10")
         
         results = model.train(
             data=yaml_path,
-            epochs=30,
-            imgsz=640,
-            batch=16,   # Larger batch size for smaller model
-            device=0,   # Use first GPU
+            epochs=50,          # Longer training
+            imgsz=1280,         # Higher resolution
+            batch=2,            # Small batch for high resolution
+            device=0,           # Use first GPU
             project='runs/detect',
-            name='yolov8s_nc1_640px_30ep_batch16',
+            name='yolov8m_nc1_1280px_50ep_batch2',
             save=True,
-            save_period=10,  # Save every 10 epochs
+            save_period=10,     # Save every 10 epochs
             val=True,
             plots=True,
-            verbose=True
+            verbose=True,
+            close_mosaic=10     # Close mosaic early for fine-tuning
         )
         
         print("✓ Training completed successfully")
@@ -298,12 +299,13 @@ def main():
             predictions, val_image_ids, annotations_path
         )
         
-        print(f"\n=== TRAINING RESULTS ===\n")
-        print(f"Model: YOLOv8s")
+        print(f"\n=== SCALED UP TRAINING RESULTS ===\n")
+        print(f"Model: YOLOv8m")
         print(f"Classes: nc=1 (single-class detector)")
-        print(f"Resolution: 640px")
-        print(f"Epochs: 30")
-        print(f"Batch size: 16")
+        print(f"Resolution: 1280px")
+        print(f"Epochs: 50")
+        print(f"Batch size: 2")
+        print(f"Close mosaic: 10")
         print(f"Validation images: {len(val_image_ids)}")
         print(f"Predictions generated: {len(predictions)}")
         print(f"\nPerformance Metrics:")
@@ -312,17 +314,34 @@ def main():
         print(f"  Combined val_score: {val_score:.4f}")
         print(f"\nModel saved to: {best_model_path}")
         
+        # Compare to previous best
+        previous_best = 0.5752  # From step 10
+        improvement = val_score - previous_best
+        improvement_pct = (improvement / previous_best) * 100 if previous_best > 0 else 0
+        
+        print(f"\nComparison to previous best (step 10):")
+        print(f"  Previous: {previous_best:.4f} (YOLOv8s, 640px, 30ep)")
+        print(f"  Current:  {val_score:.4f} (YOLOv8m, 1280px, 50ep)")
+        print(f"  Change:   {improvement:+.4f} ({improvement_pct:+.1f}%)")
+        
+        if improvement >= 0.05:
+            print(f"  ✓ SUCCESS: Improvement >= 0.05 threshold")
+        else:
+            print(f"  ⚠ MARGINAL: Improvement < 0.05 threshold")
+        
         # Output metrics for tracking
         print(f"\nMETRIC:val_score={val_score:.4f}")
         print(f"METRIC:detection_map={detection_map:.4f}")
         print(f"METRIC:classification_map={classification_map:.4f}")
         print(f"METRIC:training_success=1.0")
         print(f"METRIC:num_predictions={len(predictions)}")
-        print(f"METRIC:model_size=small")
-        print(f"METRIC:resolution=640")
-        print(f"METRIC:epochs=30")
-        print(f"METRIC:batch_size=16")
+        print(f"METRIC:model_size=medium")
+        print(f"METRIC:resolution=1280")
+        print(f"METRIC:epochs=50")
+        print(f"METRIC:batch_size=2")
         print(f"METRIC:num_categories=1")
+        print(f"METRIC:improvement={improvement:.4f}")
+        print(f"METRIC:improvement_pct={improvement_pct:.1f}")
         
     except Exception as e:
         print(f"❌ Training failed: {e}")

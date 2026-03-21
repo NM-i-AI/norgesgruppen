@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
   "revision": 5,
-  "current_step": 10,
+  "current_step": 11,
   "plan": [
     {
       "step": 1,
@@ -101,8 +101,8 @@
       "hypothesis": "A single-class detector will have higher detection recall since detection is 70% of the score, and can be combined with a separate classifier later.",
       "description": "Train YOLOv8s with nc=1 (all categories mapped to class 0), batch=16, 640px, 30 epochs. Compare detection_mAP with the multiclass model from step 9.",
       "success_criteria": "Training completes and detection_mAP exceeds the multiclass model's detection_mAP",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-010"
     },
     {
       "step": 11,
