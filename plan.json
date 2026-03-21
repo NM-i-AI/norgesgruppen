@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
   "revision": 2,
-  "current_step": 6,
+  "current_step": 7,
   "plan": [
     {
       "step": 1,
@@ -61,8 +61,8 @@
       "hypothesis": "A single-class detector should have higher detection recall since it doesn't need to distinguish 356 categories, and detection is weighted 70% in the score.",
       "description": "Train YOLOv8x with nc=1 (all annotations mapped to class 0) at imgsz=1280 for 50 epochs. Evaluate detection_mAP@0.5 only. Compare to multiclass model's detection performance.",
       "success_criteria": "Detection mAP@0.5 is higher than the multiclass model's detection mAP.",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-006"
     },
     {
       "step": 7,
