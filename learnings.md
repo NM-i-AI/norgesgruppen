@@ -72,3 +72,11 @@
 - Result: Training completed successfully with val_score=0.2812 (detection_map=0.3518, classification_map=0.1166)
 - Side effects: None observed - training completed in 272.7s with 1177 predictions on 24 validation images
 - Takeaway: The numpy.trapz compatibility fix successfully resolved the validation crash, enabling full YOLOv8m training completion with reasonable performance metrics.
+
+## Experiment 10 — Train YOLOv8s nc=1 single-class detector at 640px, 30 epochs
+- Status: SUCCESS
+- Hypothesis: A single-class detector will have higher detection recall since detection is 70% of the score, and can be combined with a separate classifier later.
+- Change: Modified to YOLOv8s with nc=1 (all 356 categories mapped to class 0), increased batch size to 16, updated config for single-class detection
+- Result: val_score 0.2812 → 0.5752 (+104% improvement), detection_map=0.8216, classification_map=0.0000 (expected)
+- Side effects: Classification component completely eliminated (0.0 mAP), but overall score doubled due to excellent detection performance
+- Takeaway: Single-class detection strategy is highly effective, achieving 82% detection mAP and doubling the validation score despite losing classification capability.

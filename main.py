@@ -99,7 +99,7 @@ def convert_coco_to_yolo_labels(coco_data, output_dir, image_ids=None, category_
 
 def create_yolo_dataset_structure():
     """
-    Create proper YOLO dataset structure with train/val splits.
+    Create proper YOLO dataset structure with train/val splits for single-class detection.
     
     Returns:
         tuple: (yaml_path, train_image_ids, val_image_ids, category_mapping)
@@ -112,17 +112,15 @@ def create_yolo_dataset_structure():
     with open(annotations_path, 'r') as f:
         coco_data = json.load(f)
     
-    # Create category mapping from original IDs to 0-indexed contiguous range
+    # Create single-class mapping (all categories -> class 0)
     categories = sorted(coco_data['categories'], key=lambda x: x['id'])
     category_mapping = {}
-    yolo_class_names = {}
     
-    for yolo_idx, cat in enumerate(categories):
+    for cat in categories:
         original_id = cat['id']
-        category_mapping[original_id] = yolo_idx
-        yolo_class_names[yolo_idx] = cat['name']
+        category_mapping[original_id] = 0  # Map all to class 0
     
-    print(f"Created category mapping: {len(category_mapping)} categories (0-{len(category_mapping)-1})")
+    print(f"Created single-class mapping: {len(category_mapping)} original categories -> class 0")
     print(f"Original category ID range: {min(category_mapping.keys())}-{max(category_mapping.keys())}")
     
     # Create train/val split
@@ -145,7 +143,7 @@ def create_yolo_dataset_structure():
     for dir_path in [train_images_dir, train_labels_dir, val_images_dir, val_labels_dir]:
         dir_path.mkdir(parents=True, exist_ok=True)
     
-    # Convert annotations to YOLO format with category mapping
+    # Convert annotations to YOLO format with single-class mapping
     convert_coco_to_yolo_labels(coco_data, train_labels_dir, train_image_ids, category_mapping)
     convert_coco_to_yolo_labels(coco_data, val_labels_dir, val_image_ids, category_mapping)
     
@@ -169,16 +167,16 @@ def create_yolo_dataset_structure():
     
     print(f"Created YOLO dataset structure in {yolo_dir}")
     
-    # Create dataset YAML
+    # Create dataset YAML for single class
     yaml_config = {
         'path': str(yolo_dir.absolute()),
         'train': 'train/images',
         'val': 'val/images',
-        'nc': len(categories),
-        'names': yolo_class_names
+        'nc': 1,  # Single class
+        'names': {0: 'product'}  # Single class name
     }
     
-    yaml_path = "grocery_yolo.yaml"
+    yaml_path = "grocery_yolo_nc1.yaml"
     import yaml
     with open(yaml_path, 'w') as f:
         yaml.dump(yaml_config, f, default_flow_style=False)
@@ -208,32 +206,32 @@ def link_images(image_ids, target_dir):
                 shutil.copy2(src_path, dst_path)
 
 def main():
-    print("=== YOLO DATASET PREPARATION AND YOLOv8m TRAINING ===")
+    print("=== YOLO DATASET PREPARATION AND YOLOv8s nc=1 TRAINING ===")
     
     try:
-        # Step 1: Create YOLO dataset structure
-        print("\n1. Creating YOLO dataset structure...")
+        # Step 1: Create YOLO dataset structure for single-class detection
+        print("\n1. Creating YOLO dataset structure for single-class detection...")
         yaml_path, train_image_ids, val_image_ids, category_mapping = create_yolo_dataset_structure()
         print(f"✓ Dataset YAML created: {yaml_path}")
-        print(f"✓ Category mapping created: {len(category_mapping)} classes")
+        print(f"✓ Single-class mapping created: all {len(category_mapping)} categories -> class 0")
         
-        # Step 2: Initialize and train YOLOv8m model
-        print("\n2. Initializing YOLOv8m model...")
-        model = YOLO('yolov8m.pt')  # Use medium model
-        print("✓ YOLOv8m model loaded")
+        # Step 2: Initialize and train YOLOv8s model
+        print("\n2. Initializing YOLOv8s model...")
+        model = YOLO('yolov8s.pt')  # Use small model
+        print("✓ YOLOv8s model loaded")
         
         # Step 3: Train the model with explicit batch size
         print("\n3. Starting training...")
-        print(f"Training config: YOLOv8m, 640px, 30 epochs, batch=8 (explicit)")
+        print(f"Training config: YOLOv8s, nc=1, 640px, 30 epochs, batch=16")
         
         results = model.train(
             data=yaml_path,
             epochs=30,
             imgsz=640,
-            batch=8,    # Explicit batch size instead of -1 (AutoBatch)
+            batch=16,   # Larger batch size for smaller model
             device=0,   # Use first GPU
             project='runs/detect',
-            name='yolov8m_nc356_640px_30ep_batch8',
+            name='yolov8s_nc1_640px_30ep_batch16',
             save=True,
             save_period=10,  # Save every 10 epochs
             val=True,
@@ -272,17 +270,11 @@ def main():
                         conf = float(boxes.conf[i].cpu().numpy())
                         yolo_cls = int(boxes.cls[i].cpu().numpy())
                         
-                        # Map YOLO class back to original category_id
-                        # Find original category_id from yolo class index
-                        original_cat_id = None
-                        for orig_id, yolo_idx in category_mapping.items():
-                            if yolo_idx == yolo_cls:
-                                original_cat_id = orig_id
-                                break
-                        
-                        if original_cat_id is None:
-                            print(f"Warning: Could not map YOLO class {yolo_cls} back to original category")
-                            continue
+                        # For single-class detector, we need to assign a category_id
+                        # For detection evaluation, we can use any valid category_id
+                        # For classification evaluation, this will be wrong, but that's expected
+                        # Use category_id=0 (first category in original dataset)
+                        original_cat_id = 0
                         
                         # Convert xyxy to xywh (COCO format)
                         x1, y1, x2, y2 = xyxy
@@ -307,16 +299,16 @@ def main():
         )
         
         print(f"\n=== TRAINING RESULTS ===\n")
-        print(f"Model: YOLOv8m")
+        print(f"Model: YOLOv8s")
+        print(f"Classes: nc=1 (single-class detector)")
         print(f"Resolution: 640px")
         print(f"Epochs: 30")
-        print(f"Batch size: 8 (explicit)")
-        print(f"Categories: {len(category_mapping)} (0-indexed)")
+        print(f"Batch size: 16")
         print(f"Validation images: {len(val_image_ids)}")
         print(f"Predictions generated: {len(predictions)}")
         print(f"\nPerformance Metrics:")
         print(f"  Detection mAP@0.5: {detection_map:.4f}")
-        print(f"  Classification mAP@0.5: {classification_map:.4f}")
+        print(f"  Classification mAP@0.5: {classification_map:.4f} (expected to be low for nc=1)")
         print(f"  Combined val_score: {val_score:.4f}")
         print(f"\nModel saved to: {best_model_path}")
         
@@ -326,11 +318,11 @@ def main():
         print(f"METRIC:classification_map={classification_map:.4f}")
         print(f"METRIC:training_success=1.0")
         print(f"METRIC:num_predictions={len(predictions)}")
-        print(f"METRIC:model_size=medium")
+        print(f"METRIC:model_size=small")
         print(f"METRIC:resolution=640")
         print(f"METRIC:epochs=30")
-        print(f"METRIC:batch_size=8")
-        print(f"METRIC:num_categories={len(category_mapping)}")
+        print(f"METRIC:batch_size=16")
+        print(f"METRIC:num_categories=1")
         
     except Exception as e:
         print(f"❌ Training failed: {e}")
