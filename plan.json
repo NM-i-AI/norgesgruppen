@@ -2,7 +2,7 @@
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
   "revision": 2,
-  "current_step": 3,
+  "current_step": 4,
   "plan": [
     {
       "step": 1,
@@ -31,8 +31,8 @@
       "hypothesis": "Monkey-patching torch.load to use weights_only=False or upgrading ultralytics will fix the model loading issue, enabling YOLO training.",
       "description": "Apply a monkey-patch to torch.load at the top of main.py to set weights_only=False by default. Verify that YOLO model loading and a short 1-epoch training run works. This unblocks all subsequent YOLO experiments.",
       "success_criteria": "YOLO model loads successfully and completes at least 1 epoch of training without errors.",
-      "status": "pending",
-      "experiment_id": null
+      "status": "completed",
+      "experiment_id": "exp-003"
     },
     {
       "step": 4,

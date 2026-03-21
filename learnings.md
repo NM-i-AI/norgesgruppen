@@ -24,3 +24,11 @@
 - Result: model_loading_success=1.0, test_training_success=1.0 (both metrics achieved for first time)
 - Side effects: Training completed quickly (0.007 hours for 1 epoch), validation ran successfully with 18.99it/s processing speed
 - Takeaway: The PyTorch 2.6 / ultralytics compatibility issue is fully resolved and YOLO training pipeline is now functional.
+
+## Experiment 4 — Build evaluation function and prepare YOLO dataset YAML
+- Status: SUCCESS
+- Hypothesis: A correct evaluation function matching the competition metric (0.7*detection_mAP@0.5 + 0.3*classification_mAP@0.5) is critical for reliable experiment comparison.
+- Change: Built comprehensive evaluation function using pycocotools that computes detection_mAP@0.5 (category-agnostic) and classification_mAP@0.5 (category-specific), then combines them with competition formula; added YOLO dataset preparation and train/val split utilities
+- Result: All functions working correctly - evaluation_function_success=1.0, yolo_dataset_success=1.0, dummy validation produces expected low scores (val_score=0.0277, detection_mAP=0.0295, classification_mAP=0.0234)
+- Side effects: Added pycocotools dependency, evaluation takes ~10 seconds due to COCO API overhead
+- Takeaway: Core evaluation infrastructure is ready and validated - can now proceed with baseline model training and systematic experiments.

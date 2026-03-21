@@ -5,3 +5,4 @@ torchvision==0.21.0
 timm==0.9.12
 psutil
 pyyaml
+pycocotools

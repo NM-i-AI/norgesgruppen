@@ -39,5 +39,25 @@
       "main.py",
       "requirements.txt"
     ]
+  },
+  "4": {
+    "experiment_id": "exp-004",
+    "step": 4,
+    "type": "experiment",
+    "title": "Build evaluation function and prepare YOLO dataset YAML",
+    "status": "SUCCESS",
+    "metrics": {
+      "evaluation_function_success": 1.0,
+      "yolo_dataset_success": 1.0,
+      "dummy_val_score": 0.0277,
+      "dummy_detection_map": 0.0295,
+      "dummy_classification_map": 0.0234
+    },
+    "timestamp": "2026-03-21T11:38:51.073402+00:00",
+    "files_modified": [
+      "main.py",
+      "utils.py",
+      "requirements.txt"
+    ]
   }
 }
