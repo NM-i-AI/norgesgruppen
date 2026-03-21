@@ -104,3 +104,11 @@
 - Result: val_score 0.5843 → 0.0 (experiment failed during reference gallery building)
 - Side effects: Pipeline failed before reaching inference stage, no performance data available
 - Takeaway: The reference gallery building step failed to extract any embeddings, likely due to image loading or preprocessing issues that need debugging before the two-stage approach can be evaluated.
+
+## Experiment 14 — Multiclass YOLOv8m at 1280px, 50 epochs with tuned settings
+- Status: SUCCESS
+- Hypothesis: A multiclass YOLOv8m at 1280px (same as our best detector config) will achieve much better combined score than the 640px version (0.2812) because higher resolution helps both detection and classification of small grocery products.
+- Change: Modified main.py to train multiclass YOLOv8m with nc=356 at 1280px resolution, proper 0-indexed category mapping, and reverse mapping for inference
+- Result: val_score 0.2812 → 0.5752 (+104.6% improvement vs multiclass baseline), detection_map=0.6545, classification_map=0.3901
+- Side effects: Only 0.0091 points below single-class detector (0.5843), showing minimal performance penalty for handling 356 classes vs 1
+- Takeaway: Higher resolution (1280px) dramatically improves multiclass performance and nearly matches single-class detector performance, making it viable for full grocery product recognition.

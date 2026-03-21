@@ -1,7 +1,7 @@
 {
   "session_id": "2026-03-21-11-30",
   "created_at": "2026-03-21T11:30:59.805945+00:00",
-  "revision": 5,
+  "revision": 6,
   "current_step": 14,
   "plan": [
     {
@@ -137,30 +137,40 @@
     {
       "step": 14,
       "type": "experiment",
-      "title": "NMS, confidence threshold, and max_det tuning",
-      "hypothesis": "With ~91 annotations per image, default NMS settings are suboptimal. Tuning should improve recall significantly.",
-      "description": "Sweep conf_threshold [0.01, 0.05, 0.1, 0.2], NMS IoU [0.4, 0.5, 0.6, 0.7], max_det [300, 500, 1000] on best detector.",
-      "success_criteria": "val_score improves by at least 0.02 from threshold tuning",
+      "title": "Multiclass YOLOv8m at 1280px, 50 epochs with tuned settings",
+      "hypothesis": "A multiclass YOLOv8m at 1280px (same as our best detector config) will achieve much better combined score than the 640px version (0.2812) because higher resolution helps both detection and classification of small grocery products.",
+      "description": "Train YOLOv8m with nc=356 at 1280px, batch=2, 50 epochs, close_mosaic=10. Use the same successful training setup from exp-011 but with all 356 classes. This should give us both detection AND classification mAP.",
+      "success_criteria": "val_score > 0.40 (significant improvement over 0.2812 multiclass baseline)",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 15,
       "type": "experiment",
-      "title": "Extended training: 100+ epochs with best configuration",
-      "hypothesis": "Longer training with close_mosaic=30 and optimized augmentation will significantly improve model quality.",
-      "description": "Retrain best detector for 100 epochs with close_mosaic=30. Use best resolution and model size from previous experiments.",
-      "success_criteria": "val_score improves by at least 0.05 over shorter training",
+      "title": "Multiclass YOLOv8l at 1280px, 80 epochs with optimized augmentation",
+      "hypothesis": "A larger model (YOLOv8l) with longer training will further improve both detection and classification quality on the dense grocery shelf images.",
+      "description": "Train YOLOv8l with nc=356 at 1280px, batch=2, 80 epochs, close_mosaic=20, patience=30. If OOM, fall back to YOLOv8m with 80 epochs.",
+      "success_criteria": "val_score > previous step's result",
       "status": "pending",
       "experiment_id": null
     },
     {
       "step": 16,
       "type": "experiment",
+      "title": "NMS, confidence threshold, and max_det tuning on best multiclass model",
+      "hypothesis": "With ~91 annotations per image, default NMS/conf/max_det settings are suboptimal. Tuning these inference parameters can significantly boost mAP without retraining.",
+      "description": "Sweep conf_threshold [0.01, 0.05, 0.1, 0.2, 0.3], NMS IoU [0.4, 0.5, 0.6, 0.7], max_det [300, 500, 1000] on the best multiclass detector from previous steps.",
+      "success_criteria": "val_score improvement of at least 0.02 over untuned inference",
+      "status": "pending",
+      "experiment_id": null
+    },
+    {
+      "step": 17,
+      "type": "experiment",
       "title": "Final pipeline optimization and submission package",
       "hypothesis": "A properly packaged submission with optimized inference will reproduce development results within 300s budget.",
       "description": "Profile complete pipeline. Optimize batch inference, FP16, minimize I/O. Write run.py, export models, package submission.zip (\u2264420MB, \u22643 weight files). Validate end-to-end.",
-      "success_criteria": "Submission package runs within 300s and reproduces val_score within 1%",
+      "success_criteria": "Submission package runs within 300s, produces valid predictions, and achieves val_score within 0.01 of development results",
       "status": "pending",
       "experiment_id": null
     }

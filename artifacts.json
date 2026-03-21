@@ -220,5 +220,30 @@
     "files_modified": [
       "main.py"
     ]
+  },
+  "14": {
+    "experiment_id": "exp-014",
+    "step": 14,
+    "type": "experiment",
+    "title": "Multiclass YOLOv8m at 1280px, 50 epochs with tuned settings",
+    "status": "REGRESS",
+    "metrics": {
+      "val_score": 0.5752,
+      "detection_map": 0.6545,
+      "classification_map": 0.3901,
+      "training_success": 1.0,
+      "num_predictions": 2231.0,
+      "resolution": 1280.0,
+      "epochs": 50.0,
+      "batch_size": 2.0,
+      "num_categories": 356.0,
+      "improvement_vs_multiclass_baseline": 0.294,
+      "improvement_pct_vs_multiclass_baseline": 104.6,
+      "difference_vs_single_class": -0.0091
+    },
+    "timestamp": "2026-03-21T12:28:41.608742+00:00",
+    "files_modified": [
+      "main.py"
+    ]
   }
 }

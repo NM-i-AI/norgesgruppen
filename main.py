@@ -99,7 +99,7 @@ def convert_coco_to_yolo_labels(coco_data, output_dir, image_ids=None, category_
 
 def create_yolo_dataset_structure():
     """
-    Create proper YOLO dataset structure with train/val splits for single-class detection.
+    Create proper YOLO dataset structure with train/val splits for multiclass detection.
     
     Returns:
         tuple: (yaml_path, train_image_ids, val_image_ids, category_mapping)
@@ -112,15 +112,17 @@ def create_yolo_dataset_structure():
     with open(annotations_path, 'r') as f:
         coco_data = json.load(f)
     
-    # Create single-class mapping (all categories -> class 0)
+    # Create 0-indexed category mapping for multiclass
     categories = sorted(coco_data['categories'], key=lambda x: x['id'])
     category_mapping = {}
+    category_names = {}
     
-    for cat in categories:
+    for idx, cat in enumerate(categories):
         original_id = cat['id']
-        category_mapping[original_id] = 0  # Map all to class 0
+        category_mapping[original_id] = idx  # Map to 0-indexed
+        category_names[idx] = cat['name']
     
-    print(f"Created single-class mapping: {len(category_mapping)} original categories -> class 0")
+    print(f"Created multiclass mapping: {len(category_mapping)} categories (0-{len(category_mapping)-1})")
     print(f"Original category ID range: {min(category_mapping.keys())}-{max(category_mapping.keys())}")
     
     # Create train/val split
@@ -143,7 +145,7 @@ def create_yolo_dataset_structure():
     for dir_path in [train_images_dir, train_labels_dir, val_images_dir, val_labels_dir]:
         dir_path.mkdir(parents=True, exist_ok=True)
     
-    # Convert annotations to YOLO format with single-class mapping
+    # Convert annotations to YOLO format with multiclass mapping
     convert_coco_to_yolo_labels(coco_data, train_labels_dir, train_image_ids, category_mapping)
     convert_coco_to_yolo_labels(coco_data, val_labels_dir, val_image_ids, category_mapping)
     
@@ -167,16 +169,16 @@ def create_yolo_dataset_structure():
     
     print(f"Created YOLO dataset structure in {yolo_dir}")
     
-    # Create dataset YAML for single class
+    # Create dataset YAML for multiclass
     yaml_config = {
         'path': str(yolo_dir.absolute()),
         'train': 'train/images',
         'val': 'val/images',
-        'nc': 1,  # Single class
-        'names': {0: 'product'}  # Single class name
+        'nc': len(category_mapping),  # Number of classes
+        'names': category_names  # Class names mapping
     }
     
-    yaml_path = "grocery_yolo_nc1.yaml"
+    yaml_path = "grocery_yolo_multiclass.yaml"
     import yaml
     with open(yaml_path, 'w') as f:
         yaml.dump(yaml_config, f, default_flow_style=False)
@@ -206,32 +208,32 @@ def link_images(image_ids, target_dir):
                 shutil.copy2(src_path, dst_path)
 
 def main():
-    print("=== SCALING UP: YOLOv8m nc=1 at 1280px, 50 epochs ===\n")
+    print("=== MULTICLASS YOLOv8m at 1280px, 50 epochs ===\n")
     
     try:
-        # Step 1: Create YOLO dataset structure for single-class detection
-        print("1. Creating YOLO dataset structure for single-class detection...")
+        # Step 1: Create YOLO dataset structure for multiclass detection
+        print("1. Creating YOLO dataset structure for multiclass detection...")
         yaml_path, train_image_ids, val_image_ids, category_mapping = create_yolo_dataset_structure()
         print(f"✓ Dataset YAML created: {yaml_path}")
-        print(f"✓ Single-class mapping created: all {len(category_mapping)} categories -> class 0")
+        print(f"✓ Multiclass mapping created: {len(category_mapping)} categories (0-{len(category_mapping)-1})")
         
         # Step 2: Initialize and train YOLOv8m model
         print("\n2. Initializing YOLOv8m model...")
         model = YOLO('yolov8m.pt')  # Use medium model
         print("✓ YOLOv8m model loaded")
         
-        # Step 3: Train the model with higher resolution and longer training
-        print("\n3. Starting training...")
-        print(f"Training config: YOLOv8m, nc=1, 1280px, 50 epochs, batch=2, close_mosaic=10")
+        # Step 3: Train the model with multiclass configuration
+        print("\n3. Starting multiclass training...")
+        print(f"Training config: YOLOv8m, nc={len(category_mapping)}, 1280px, 50 epochs, batch=2, close_mosaic=10")
         
         results = model.train(
             data=yaml_path,
-            epochs=50,          # Longer training
-            imgsz=1280,         # Higher resolution
+            epochs=50,          # Same as successful exp-011
+            imgsz=1280,         # High resolution for small products
             batch=2,            # Small batch for high resolution
             device=0,           # Use first GPU
             project='runs/detect',
-            name='yolov8m_nc1_1280px_50ep_batch2',
+            name='yolov8m_multiclass_1280px_50ep_batch2',
             save=True,
             save_period=10,     # Save every 10 epochs
             val=True,
@@ -253,6 +255,9 @@ def main():
         
         print(f"Running inference on {len(val_image_paths)} validation images...")
         
+        # Create reverse category mapping (YOLO class -> original category_id)
+        reverse_mapping = {v: k for k, v in category_mapping.items()}
+        
         predictions = []
         for img_path in val_image_paths:
             # Extract image_id from filename
@@ -271,11 +276,8 @@ def main():
                         conf = float(boxes.conf[i].cpu().numpy())
                         yolo_cls = int(boxes.cls[i].cpu().numpy())
                         
-                        # For single-class detector, we need to assign a category_id
-                        # For detection evaluation, we can use any valid category_id
-                        # For classification evaluation, this will be wrong, but that's expected
-                        # Use category_id=0 (first category in original dataset)
-                        original_cat_id = 0
+                        # Map YOLO class back to original category_id
+                        original_cat_id = reverse_mapping[yolo_cls]
                         
                         # Convert xyxy to xywh (COCO format)
                         x1, y1, x2, y2 = xyxy
@@ -299,9 +301,9 @@ def main():
             predictions, val_image_ids, annotations_path
         )
         
-        print(f"\n=== SCALED UP TRAINING RESULTS ===\n")
+        print(f"\n=== MULTICLASS TRAINING RESULTS ===\n")
         print(f"Model: YOLOv8m")
-        print(f"Classes: nc=1 (single-class detector)")
+        print(f"Classes: nc={len(category_mapping)} (multiclass)")
         print(f"Resolution: 1280px")
         print(f"Epochs: 50")
         print(f"Batch size: 2")
@@ -310,24 +312,33 @@ def main():
         print(f"Predictions generated: {len(predictions)}")
         print(f"\nPerformance Metrics:")
         print(f"  Detection mAP@0.5: {detection_map:.4f}")
-        print(f"  Classification mAP@0.5: {classification_map:.4f} (expected to be low for nc=1)")
+        print(f"  Classification mAP@0.5: {classification_map:.4f}")
         print(f"  Combined val_score: {val_score:.4f}")
         print(f"\nModel saved to: {best_model_path}")
         
-        # Compare to previous best
-        previous_best = 0.5752  # From step 10
-        improvement = val_score - previous_best
-        improvement_pct = (improvement / previous_best) * 100 if previous_best > 0 else 0
+        # Compare to previous multiclass baseline
+        previous_multiclass = 0.2812  # From exp-009 (YOLOv8m nc=356 at 640px)
+        improvement = val_score - previous_multiclass
+        improvement_pct = (improvement / previous_multiclass) * 100 if previous_multiclass > 0 else 0
         
-        print(f"\nComparison to previous best (step 10):")
-        print(f"  Previous: {previous_best:.4f} (YOLOv8s, 640px, 30ep)")
-        print(f"  Current:  {val_score:.4f} (YOLOv8m, 1280px, 50ep)")
+        print(f"\nComparison to previous multiclass baseline (exp-009):")
+        print(f"  Previous: {previous_multiclass:.4f} (YOLOv8m, nc=356, 640px, 30ep)")
+        print(f"  Current:  {val_score:.4f} (YOLOv8m, nc={len(category_mapping)}, 1280px, 50ep)")
         print(f"  Change:   {improvement:+.4f} ({improvement_pct:+.1f}%)")
         
-        if improvement >= 0.05:
-            print(f"  ✓ SUCCESS: Improvement >= 0.05 threshold")
+        # Compare to best single-class detector
+        best_single_class = 0.5843  # From exp-011
+        single_class_diff = val_score - best_single_class
+        
+        print(f"\nComparison to best single-class detector (exp-011):")
+        print(f"  Single-class: {best_single_class:.4f} (YOLOv8m, nc=1, 1280px, 50ep)")
+        print(f"  Multiclass:   {val_score:.4f} (YOLOv8m, nc={len(category_mapping)}, 1280px, 50ep)")
+        print(f"  Difference:   {single_class_diff:+.4f}")
+        
+        if val_score > 0.40:
+            print(f"  ✓ SUCCESS: val_score > 0.40 threshold")
         else:
-            print(f"  ⚠ MARGINAL: Improvement < 0.05 threshold")
+            print(f"  ⚠ BELOW TARGET: val_score < 0.40 threshold")
         
         # Output metrics for tracking
         print(f"\nMETRIC:val_score={val_score:.4f}")
@@ -339,9 +350,10 @@ def main():
         print(f"METRIC:resolution=1280")
         print(f"METRIC:epochs=50")
         print(f"METRIC:batch_size=2")
-        print(f"METRIC:num_categories=1")
-        print(f"METRIC:improvement={improvement:.4f}")
-        print(f"METRIC:improvement_pct={improvement_pct:.1f}")
+        print(f"METRIC:num_categories={len(category_mapping)}")
+        print(f"METRIC:improvement_vs_multiclass_baseline={improvement:.4f}")
+        print(f"METRIC:improvement_pct_vs_multiclass_baseline={improvement_pct:.1f}")
+        print(f"METRIC:difference_vs_single_class={single_class_diff:.4f}")
         
     except Exception as e:
         print(f"❌ Training failed: {e}")
