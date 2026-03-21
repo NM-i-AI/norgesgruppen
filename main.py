@@ -1,10 +1,41 @@
+# Fix PyTorch 2.6 weight loading BEFORE any ultralytics import
+import torch
+
+# Monkey-patch torch.load to disable weights_only restriction
+original_torch_load = torch.load
+def patched_torch_load(*args, **kwargs):
+    kwargs.setdefault('weights_only', False)
+    return original_torch_load(*args, **kwargs)
+torch.load = patched_torch_load
+
+# Add safe globals for ultralytics weight loading
+try:
+    torch.serialization.add_safe_globals([
+        'collections.OrderedDict',
+        'torch.nn.modules.conv.Conv2d',
+        'torch.nn.modules.batchnorm.BatchNorm2d',
+        'torch.nn.modules.activation.SiLU',
+        'torch.nn.modules.pooling.AdaptiveAvgPool2d',
+        'torch.nn.modules.linear.Linear',
+        'torch.nn.modules.dropout.Dropout',
+        'ultralytics.nn.modules.conv.Conv',
+        'ultralytics.nn.modules.block.C2f',
+        'ultralytics.nn.modules.head.Detect'
+    ])
+except AttributeError:
+    # Fallback for older PyTorch versions
+    pass
+
 import json
 import os
 from pathlib import Path
 import numpy as np
 from collections import defaultdict, Counter
 import random
-from utils import evaluate_predictions
+from utils import evaluate_predictions, load_coco_split
+
+# Now safe to import ultralytics
+from ultralytics import YOLO
 
 def create_train_val_split():
     """Create 90/10 stratified split by image, ensuring store sections are represented."""
@@ -135,135 +166,201 @@ def coco_to_yolo_labels(coco_data, output_dir, single_class=False):
     
     print(f"Created YOLO labels in {output_dir} ({'single-class' if single_class else 'multi-class'})")
 
-def create_data_yaml(split_type, num_classes):
-    """Create data.yaml file for ultralytics training."""
+def create_yolo_dataset_files():
+    """Create YOLO dataset files with proper train/val split."""
     data_path = Path("data")
     
-    # Create class names list
-    if num_classes == 1:
-        names = ['product']
-    else:
-        # Load category names from original annotations
-        with open(data_path / "train" / "annotations.json") as f:
-            coco_data = json.load(f)
-        
-        # Create names list indexed by category_id
-        names = [''] * 357  # 0-356
-        for cat in coco_data['categories']:
-            names[cat['id']] = cat['name']
+    # Load splits
+    train_coco = load_coco_split(data_path / "train_split.json")
+    val_coco = load_coco_split(data_path / "val_split.json")
     
+    # Get image filenames for each split
+    train_images = [img['file_name'] for img in train_coco['images']]
+    val_images = [img['file_name'] for img in val_coco['images']]
+    
+    # Create train.txt and val.txt files with image paths
+    train_txt_path = data_path / "train.txt"
+    val_txt_path = data_path / "val.txt"
+    
+    with open(train_txt_path, 'w') as f:
+        for img_name in train_images:
+            img_path = data_path / "train" / "images" / img_name
+            f.write(f"{img_path.absolute()}\n")
+    
+    with open(val_txt_path, 'w') as f:
+        for img_name in val_images:
+            img_path = data_path / "train" / "images" / img_name
+            f.write(f"{img_path.absolute()}\n")
+    
+    print(f"Created {train_txt_path} with {len(train_images)} images")
+    print(f"Created {val_txt_path} with {len(val_images)} images")
+    
+    return train_txt_path, val_txt_path
+
+def train_yolo_baseline():
+    """Train YOLOv8n baseline model."""
+    print("\n=== Training YOLOv8n Baseline ===")
+    
+    # Check if splits exist, create if needed
+    data_path = Path("data")
+    if not (data_path / "train_split.json").exists():
+        print("Creating train/val splits...")
+        create_train_val_split()
+    
+    # Create labels directory
+    labels_dir = data_path / "train" / "labels"
+    labels_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if YOLO labels exist, create if needed
+    if not list(labels_dir.glob("*.txt")):
+        print("Creating YOLO labels...")
+        # Load full dataset and create labels for all images
+        with open(data_path / "train" / "annotations.json") as f:
+            full_coco = json.load(f)
+        
+        coco_to_yolo_labels(full_coco, labels_dir, single_class=False)
+    
+    # Create train.txt and val.txt files
+    train_txt_path, val_txt_path = create_yolo_dataset_files()
+    
+    # Create data.yaml with correct paths
     yaml_content = f"""# YOLO dataset config
 path: {data_path.absolute()}
-train: train/images
-val: train/images  # We'll filter by split during training
+train: {train_txt_path.name}
+val: {val_txt_path.name}
 
-nc: {num_classes}
-names: {names}
+nc: 357
+names: {list(range(357))}
 """
     
-    yaml_filename = f"data_{split_type}.yaml"
-    with open(data_path / yaml_filename, 'w') as f:
+    yaml_path = data_path / "data_mc.yaml"
+    with open(yaml_path, 'w') as f:
         f.write(yaml_content)
     
-    print(f"Created {yaml_filename}")
-    return data_path / yaml_filename
-
-def test_evaluation_function():
-    """Test the evaluation function with dummy predictions."""
-    print("\nTesting evaluation function...")
+    print(f"Created {yaml_path}")
     
-    # Load val split for testing
-    data_path = Path("data")
-    with open(data_path / "val_split.json") as f:
-        val_coco = json.load(f)
-    
-    # Create dummy predictions
-    dummy_predictions = []
-    
-    # Add some correct predictions (high scores)
-    for i, ann in enumerate(val_coco['annotations'][:10]):
-        # Perfect detection
-        dummy_predictions.append({
-            'image_id': ann['image_id'],
-            'category_id': ann['category_id'],
-            'bbox': ann['bbox'],
-            'score': 0.9
-        })
-        
-        # Detection-only (wrong category)
-        if i < 5:
-            dummy_predictions.append({
-                'image_id': ann['image_id'], 
-                'category_id': 0,  # Wrong category
-                'bbox': ann['bbox'],
-                'score': 0.8
-            })
-    
-    # Add some false positives
-    for img in val_coco['images'][:3]:
-        dummy_predictions.append({
-            'image_id': img['id'],
-            'category_id': 1,
-            'bbox': [10, 10, 50, 50],  # Random box
-            'score': 0.7
-        })
-    
-    # Test evaluation
     try:
-        val_score, det_map, cls_map = evaluate_predictions(dummy_predictions, val_coco)
-        print(f"Evaluation test successful!")
-        print(f"  Detection mAP@0.5: {det_map:.4f}")
-        print(f"  Classification mAP@0.5: {cls_map:.4f}")
-        print(f"  Combined val_score: {val_score:.4f}")
+        # Initialize YOLOv8n model
+        print("Initializing YOLOv8n model...")
+        model = YOLO('yolov8n.pt')  # Start with nano for fast iteration
         
-        # Verify score calculation
-        expected_score = 0.7 * det_map + 0.3 * cls_map
-        print(f"  Expected score: {expected_score:.4f} (matches: {abs(val_score - expected_score) < 1e-6})")
+        print(f"Model loaded successfully")
+        print(f"YOLOv8n summary: {model.model}")
+        print(f"Model info: {model.info()}")
+        
+        # Determine device to use
+        if torch.cuda.is_available():
+            device = '0'  # Use first GPU
+            print(f"Using CUDA device: {device}")
+        else:
+            device = 'cpu'
+            print(f"CUDA not available, using CPU")
+        
+        # Train the model
+        print("Starting training...")
+        results = model.train(
+            data=str(yaml_path),
+            epochs=50,  # Reduced for fast iteration
+            batch=16,   # Conservative batch size
+            imgsz=640,  # Standard resolution
+            device=device,  # Use detected device instead of 'auto'
+            project='runs/detect',
+            name='yolov8n_baseline',
+            exist_ok=True,
+            verbose=True,
+            save=True,
+            plots=True,
+            val=True,
+            patience=20,
+            close_mosaic=25  # Close mosaic at 50% of training
+        )
+        
+        print(f"Training completed successfully!")
+        print(f"Results: {results}")
+        
+        # Load validation split for evaluation
+        val_coco = load_coco_split(data_path / "val_split.json")
+        
+        # Run inference on validation images
+        print("\nRunning validation inference...")
+        val_predictions = []
+        
+        val_image_dir = data_path / "train" / "images"
+        val_image_ids = [img['id'] for img in val_coco['images']]
+        
+        for img_info in val_coco['images']:
+            img_path = val_image_dir / img_info['file_name']
+            
+            if img_path.exists():
+                # Run inference
+                results = model(str(img_path), verbose=False)
+                
+                # Convert results to COCO format
+                for result in results:
+                    boxes = result.boxes
+                    if boxes is not None:
+                        for i in range(len(boxes)):
+                            # Extract box data
+                            xyxy = boxes.xyxy[i].cpu().numpy()
+                            conf = boxes.conf[i].cpu().numpy()
+                            cls = int(boxes.cls[i].cpu().numpy())
+                            
+                            # Convert xyxy to xywh (COCO format)
+                            x1, y1, x2, y2 = xyxy
+                            x, y, w, h = x1, y1, x2-x1, y2-y1
+                            
+                            val_predictions.append({
+                                'image_id': img_info['id'],
+                                'category_id': cls,
+                                'bbox': [float(x), float(y), float(w), float(h)],
+                                'score': float(conf)
+                            })
+        
+        print(f"Generated {len(val_predictions)} predictions")
+        
+        # Evaluate predictions
+        if val_predictions:
+            val_score, det_map, cls_map = evaluate_predictions(val_predictions, val_coco)
+            
+            print(f"\n=== Validation Results ===")
+            print(f"Detection mAP@0.5: {det_map:.4f}")
+            print(f"Classification mAP@0.5: {cls_map:.4f}")
+            print(f"Combined val_score: {val_score:.4f}")
+            
+            # Report metrics for orchestrator
+            print(f"\nMETRIC:val_score={val_score:.4f}")
+            print(f"METRIC:detection_map={det_map:.4f}")
+            print(f"METRIC:classification_map={cls_map:.4f}")
+            print(f"METRIC:num_predictions={len(val_predictions)}")
+            print(f"METRIC:model_size=yolov8n")
+            print(f"METRIC:resolution=640")
+            print(f"METRIC:epochs=50")
+            
+        else:
+            print("No predictions generated - model may need more training")
+            print(f"METRIC:val_score=0.0000")
+            print(f"METRIC:detection_map=0.0000")
+            print(f"METRIC:classification_map=0.0000")
+            print(f"METRIC:num_predictions=0")
         
     except Exception as e:
-        print(f"Evaluation test failed: {e}")
+        print(f"Training failed: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Report failure metrics
+        print(f"METRIC:val_score=0.0000")
+        print(f"METRIC:training_failed=1")
+        raise
 
 def main():
-    """Main data preparation pipeline."""
-    print("=== Data Preparation Pipeline ===")
+    """Main training pipeline."""
+    print("=== YOLOv8n Baseline Training Pipeline ===")
     
-    # Step 1: Create train/val split
-    train_coco, val_coco = create_train_val_split()
+    # Train baseline model
+    train_yolo_baseline()
     
-    # Step 2: Create YOLO labels for multi-class (356 categories)
-    data_path = Path("data")
-    labels_mc_dir = data_path / "labels_mc"
-    coco_to_yolo_labels(train_coco, labels_mc_dir / "train", single_class=False)
-    coco_to_yolo_labels(val_coco, labels_mc_dir / "val", single_class=False)
-    
-    # Step 3: Create YOLO labels for single-class (detection only)
-    labels_sc_dir = data_path / "labels_sc"
-    coco_to_yolo_labels(train_coco, labels_sc_dir / "train", single_class=True)
-    coco_to_yolo_labels(val_coco, labels_sc_dir / "val", single_class=True)
-    
-    # Step 4: Create data.yaml files
-    yaml_mc = create_data_yaml("mc", 357)  # 0-356 categories
-    yaml_sc = create_data_yaml("sc", 1)    # Single class
-    
-    # Step 5: Test evaluation function
-    test_evaluation_function()
-    
-    print("\n=== Data Preparation Complete ===")
-    print(f"Files created:")
-    print(f"  - data/train_split.json ({len(train_coco['annotations'])} annotations)")
-    print(f"  - data/val_split.json ({len(val_coco['annotations'])} annotations)")
-    print(f"  - data/labels_mc/train/ and data/labels_mc/val/ (multi-class YOLO labels)")
-    print(f"  - data/labels_sc/train/ and data/labels_sc/val/ (single-class YOLO labels)")
-    print(f"  - data/data_mc.yaml and data/data_sc.yaml (ultralytics configs)")
-    
-    # Report metrics for orchestrator
-    print(f"\nMETRIC:train_images={len(train_coco['images'])}")
-    print(f"METRIC:val_images={len(val_coco['images'])}")
-    print(f"METRIC:train_annotations={len(train_coco['annotations'])}")
-    print(f"METRIC:val_annotations={len(val_coco['annotations'])}")
-    print(f"METRIC:num_categories={len(train_coco['categories'])}")
+    print("\n=== Training Pipeline Complete ===")
 
 if __name__ == "__main__":
     main()

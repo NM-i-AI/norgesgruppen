@@ -40,3 +40,11 @@
 - Result: Training failed due to PyTorch 2.6 weights_only security restriction when loading pretrained YOLOv8x weights
 - Side effects: Model successfully loaded (68M parameters, 260 GFLOPs) but crashed during weight transfer from pretrained checkpoint
 - Takeaway: Need to add torch.serialization.safe_globals or set weights_only=False to load YOLOv8x pretrained weights in PyTorch 2.6+.
+
+## Experiment 6 — Fix PyTorch 2.6 weight loading and train YOLOv8n baseline at 640
+- Status: FAILED
+- Hypothesis: Patching torch.load before ultralytics import and using a small model will give us a working training pipeline quickly.
+- Change: Applied torch.load monkey-patch at top of main.py, implemented YOLOv8n baseline training with 50 epochs, batch=16, 640px resolution
+- Result: Training failed with "torch.cat(): expected a non-empty list of Tensors" error during validation after model loaded successfully
+- Side effects: Model architecture loaded correctly (3.4M parameters), pretrained weights transferred (319/355 items), but validation dataset appears empty
+- Takeaway: The dataset configuration is broken - validation is trying to concatenate empty tensor lists, suggesting no valid labels or images are being found during validation.
