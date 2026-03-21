@@ -121,5 +121,27 @@
     "files_modified": [
       "main.py"
     ]
+  },
+  "9": {
+    "experiment_id": "exp-009",
+    "step": 9,
+    "type": "experiment",
+    "title": "Fix numpy.trapz compatibility and train YOLOv8m nc=356 at 640px, 30 epochs",
+    "status": "SUCCESS",
+    "metrics": {
+      "val_score": 0.2812,
+      "detection_map": 0.3518,
+      "classification_map": 0.1166,
+      "training_success": 1.0,
+      "num_predictions": 1177.0,
+      "resolution": 640.0,
+      "epochs": 30.0,
+      "batch_size": 8.0,
+      "num_categories": 356.0
+    },
+    "timestamp": "2026-03-21T11:52:16.949764+00:00",
+    "files_modified": [
+      "main.py"
+    ]
   }
 }

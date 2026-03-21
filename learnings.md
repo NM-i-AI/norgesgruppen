@@ -64,3 +64,11 @@
 - Result: Training failed due to numpy compatibility issue - `numpy.trapz` function was removed in newer numpy versions
 - Side effects: Model loaded successfully and began training before hitting the numpy error during validation
 - Takeaway: The batch size and category mapping fixes worked, but ultralytics has a dependency issue with newer numpy versions that removes the `trapz` function.
+
+## Experiment 9 — Fix numpy.trapz compatibility and train YOLOv8m nc=356 at 640px, 30 epochs
+- Status: SUCCESS
+- Hypothesis: Adding a monkey-patch for numpy.trapz (using numpy.trapezoid if available, or scipy.integrate.trapezoid) will fix the validation crash, allowing YOLOv8m training to complete successfully.
+- Change: Added numpy.trapz compatibility fix at the top of main.py before importing ultralytics
+- Result: Training completed successfully with val_score=0.2812 (detection_map=0.3518, classification_map=0.1166)
+- Side effects: None observed - training completed in 272.7s with 1177 predictions on 24 validation images
+- Takeaway: The numpy.trapz compatibility fix successfully resolved the validation crash, enabling full YOLOv8m training completion with reasonable performance metrics.

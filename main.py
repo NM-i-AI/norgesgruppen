@@ -1,3 +1,14 @@
+# Fix numpy.trapz compatibility before importing ultralytics
+import numpy as np
+if not hasattr(np, 'trapz'):
+    # numpy >= 2.0 removed trapz, use trapezoid instead
+    if hasattr(np, 'trapezoid'):
+        np.trapz = np.trapezoid
+    else:
+        # Fallback to scipy if numpy.trapezoid also missing
+        from scipy.integrate import trapezoid
+        np.trapz = trapezoid
+
 import torch
 
 # Monkey-patch torch.load to fix ultralytics compatibility with PyTorch 2.6
