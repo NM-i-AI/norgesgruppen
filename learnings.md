@@ -24,3 +24,11 @@
 - Result: Successfully created 224 train/24 val images with 20540/2191 annotations across 356 categories
 - Side effects: Evaluation function has warnings with dummy data but works correctly (returns 0.0000 as expected)
 - Takeaway: Data preparation infrastructure is complete and ready for model training with both multi-class and single-class variants available.
+
+## Experiment 4 — Baseline: YOLOv8m multi-class at 640
+- Status: FAILED
+- Hypothesis: YOLOv8m with 356 classes at 640px provides a reasonable starting baseline
+- Change: Implemented complete YOLOv8m training pipeline with 356 classes, 640px resolution, 80 epochs, batch size 16
+- Result: Training failed due to PyTorch 2.6 weights_only=True security restriction when loading pretrained weights
+- Side effects: Model architecture loaded successfully (26M parameters, 80.2 GFLOPs) before failing at weight loading
+- Takeaway: Need to handle PyTorch 2.6's new weights_only=True default by either setting weights_only=False or using safe_globals context manager for YOLO model loading.
