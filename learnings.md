@@ -48,3 +48,11 @@
 - Result: Training failed with CUDA device-side assert triggered in TAL (Task-Aligned Learning) module during bbox_scores assignment
 - Side effects: Model loaded successfully and batch size was auto-determined as 4, but crashed during first epoch
 - Takeaway: The single-class mapping likely created invalid label indices that triggered CUDA assertions in the loss computation, requiring proper label validation before training.
+
+## Experiment 7 — Properly prepare YOLO label files and train YOLOv8m nc=356 at 640px, 30 epochs
+- Status: FAILED
+- Hypothesis: YOLOv8m at 640px with proper YOLO-format label files will train successfully without OOM, giving us a working multiclass baseline.
+- Change: Converted COCO annotations to YOLO format, created proper train/val directory structure with symlinked images, and attempted to train YOLOv8m at 640px for 30 epochs.
+- Result: CUDA OOM error during training - tried to allocate 572 MiB but only 460 MiB free, despite AutoBatch suggesting batch size 122.
+- Side effects: Dataset preparation was successful (labels cached properly), but AutoBatch calculation appears unreliable for actual training memory requirements.
+- Takeaway: Even YOLOv8m with AutoBatch optimization still hits OOM, so we need to either use a smaller model (YOLOv8s/n) or manually set a much smaller batch size.
