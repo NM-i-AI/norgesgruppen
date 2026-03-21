@@ -16,3 +16,11 @@
 - Result: Dataset has 22,731 annotations across 356 categories with heavy class imbalance; 84.2% are large objects (≥96²); most products have multi-view reference images (avg 4.6 per product)
 - Side effects: None (analysis only)
 - Takeaway: The severe class imbalance (top category has 422 annotations vs 41 categories with only 1) and abundance of reference images suggest a few-shot learning approach could be more effective than traditional classification.
+
+## Experiment 3 — Create train/val split, YOLO labels, evaluation function, and data.yaml
+- Status: SUCCESS
+- Hypothesis: None (refactor)
+- Change: Implemented complete data preparation pipeline with 90/10 stratified split, COCO/YOLO format conversion, and evaluation function
+- Result: Successfully created 224 train/24 val images with 20540/2191 annotations across 356 categories
+- Side effects: Evaluation function has warnings with dummy data but works correctly (returns 0.0000 as expected)
+- Takeaway: Data preparation infrastructure is complete and ready for model training with both multi-class and single-class variants available.
